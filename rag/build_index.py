@@ -1,7 +1,7 @@
 """Embed chunks and index them in Qdrant.
 
 Querying lives in rag/retriever.py, not here — this module only builds the index.
-An earlier `search()` helper here was the second of four retrieval paths in the
+An earlier `search()` helper here was the second of five retrieval paths in the
 codebase and is deliberately gone (see docs/decisions/001-unified-retrieval-path.md).
 """
 
