@@ -4,11 +4,15 @@ Without this, a re-index can silently orphan labels and the eval quietly scores
 against chunks that are no longer there. Guards R1 Step 3's corpus expansion.
 """
 
+from pathlib import Path
+
 import pytest
 
 from eval.eval_harness import load_eval_set
 
-EVAL_SET = "eval/eval_set.jsonl"
+# Anchored to the repo, not the working directory: the suite must pass from
+# anywhere, including a CI runner that invokes pytest from outside the root.
+EVAL_SET = Path(__file__).resolve().parent.parent / "eval" / "eval_set.jsonl"
 
 
 @pytest.mark.integration
