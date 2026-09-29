@@ -3,10 +3,9 @@
 from functools import lru_cache
 
 import boto3
-from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 
-from rag.build_index import MODEL_NAME, QDRANT_HOST, QDRANT_PORT, search
+from rag.retriever import DenseRetriever
+from rag.types import Chunk
 
 REGION = "eu-central-1"
 # Frankfurt invokes models through a regional inference profile (the "eu." prefix).
@@ -19,15 +18,10 @@ SYSTEM_PROMPT = (
 )
 
 
-# Loaded once and reused across requests.
+# Loaded once and reused across requests (the embedding model load dominates startup).
 @lru_cache(maxsize=1)
-def _model() -> SentenceTransformer:
-    return SentenceTransformer(MODEL_NAME)
-
-
-@lru_cache(maxsize=1)
-def _qdrant() -> QdrantClient:
-    return QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+def _retriever() -> DenseRetriever:
+    return DenseRetriever()
 
 
 @lru_cache(maxsize=1)
@@ -35,16 +29,20 @@ def _bedrock():
     return boto3.client("bedrock-runtime", region_name=REGION)
 
 
-def _format_context(hits) -> str:
-    return "\n\n".join(f"[{h.payload['source']}]\n{h.payload['text']}" for h in hits)
+def _format_context(chunks: list[Chunk]) -> str:
+    return "\n\n".join(f"[{c.source}]\n{c.text}" for c in chunks)
 
 
-def retrieve_chunks(question: str, k: int = 3):
-    """Retrieve the top-k chunks for a question (kept separate for graph orchestration)."""
-    return search(_qdrant(), _model(), question, k)
+def retrieve_chunks(question: str, k: int = 3) -> list[Chunk]:
+    """Retrieve the top-k chunks for a question (kept separate for graph orchestration).
+
+    Goes through the same DenseRetriever the eval harness scores, so a retrieval
+    improvement measured offline reaches this path by construction.
+    """
+    return _retriever().retrieve_chunks(question, k)
 
 
-def generate_from_chunks(question: str, hits) -> str:
+def generate_from_chunks(question: str, chunks: list[Chunk]) -> str:
     """Generate a grounded answer from already-retrieved chunks."""
     response = _bedrock().converse(
         modelId=BEDROCK_MODEL_ID,
@@ -53,7 +51,7 @@ def generate_from_chunks(question: str, hits) -> str:
             {
                 "role": "user",
                 "content": [
-                    {"text": f"Context:\n{_format_context(hits)}\n\nQuestion: {question}"}
+                    {"text": f"Context:\n{_format_context(chunks)}\n\nQuestion: {question}"}
                 ],
             }
         ],
@@ -63,9 +61,9 @@ def generate_from_chunks(question: str, hits) -> str:
 
 
 def answer_question(question: str, k: int = 3) -> tuple[str, list[str]]:
-    hits = retrieve_chunks(question, k)
-    answer = generate_from_chunks(question, hits)
-    return answer, [hit.payload["chunk_id"] for hit in hits]
+    chunks = retrieve_chunks(question, k)
+    answer = generate_from_chunks(question, chunks)
+    return answer, [c.chunk_id for c in chunks]
 
 
 def main() -> None:

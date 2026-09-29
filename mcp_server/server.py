@@ -38,18 +38,9 @@ def search_documents(query: str, k: int = 5) -> list[dict]:
     Returns:
         Ranked list of {chunk_id, source, text} dicts.
     """
-    hits = _retriever._client.query_points(
-        collection_name="documents",
-        query=_retriever._model.encode(query, normalize_embeddings=True).tolist(),
-        limit=k,
-    ).points
     return [
-        {
-            "chunk_id": h.payload["chunk_id"],
-            "source": h.payload["source"],
-            "text": h.payload["text"],
-        }
-        for h in hits
+        {"chunk_id": c.chunk_id, "source": c.source, "text": c.text}
+        for c in _retriever.retrieve_chunks(query, k)
     ]
 
 
