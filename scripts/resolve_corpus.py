@@ -24,6 +24,7 @@ import json
 import re
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -53,7 +54,9 @@ def _get(url: str, tries: int = 3) -> bytes | None:
 
 
 def _norm(t: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", (t or "").lower())
+    # NFKD first: stripping non-alphanumerics without it deletes typographic
+    # ligatures, turning "significance" into "signicance" (see verify_corpus.py).
+    return re.sub(r"[^a-z0-9]", "", unicodedata.normalize("NFKD", t or "").lower())
 
 
 def _is_pdf(url: str) -> bool:

@@ -72,10 +72,6 @@ MANUAL = [
     (55, "Holm 1979, A simple sequentially rejective multiple test procedure"),
 ]
 
-if __name__ == "__main__":
-    print(f"{len(SOURCES)} fetchable, {len(MANUAL)} manual")
-
-
 # Candidate URLs for entries the APIs could not resolve.
 #
 # Provenance matters here. Entries marked "bib" are taken verbatim from the URL
@@ -88,7 +84,6 @@ CANDIDATES = {
     # from the thesis bibliography
     "pradhan2012_conll":            ["https://aclanthology.org/W12-4501.pdf"],            # bib
     "vilain1995_muc":               ["https://aclanthology.org/M95-1005.pdf"],            # bib
-    "bagga1998_bcubed":             ["https://aclanthology.org/L98-1063.pdf"],            # bib
     "luo2005_ceaf":                 ["https://aclanthology.org/H05-1004.pdf"],            # bib
     "bergkirkpatrick2012_significance": ["https://aclanthology.org/D12-1091.pdf"],        # bib
     "su2021_whitening":             ["https://arxiv.org/pdf/2103.15316"],                 # bib
@@ -102,11 +97,17 @@ CANDIDATES = {
     "ng2010_fifteen_years":         ["https://aclanthology.org/P10-1142.pdf"],            # inferred
     "pradhan2014_scoring":          ["https://aclanthology.org/P14-2006.pdf"],            # inferred
     "yosinski2014_transferable":    ["https://arxiv.org/pdf/1411.1792"],                  # inferred
-    "ding2023_peft":                ["https://arxiv.org/pdf/2203.06904"],                 # inferred
     "hu2022_lora":                  ["https://arxiv.org/pdf/2106.09685"],                 # OpenReview blocks bots
     "howard2018_ulmfit":            ["https://aclanthology.org/P18-1031.pdf"],            # canonical host
     # No open PDF found for these — left out deliberately rather than guessed at:
     "levesque2012_winograd":        [],  # AAAI/KR proceedings
-    "bagga1998_bcubed":             [],  # LREC 1998 predates the Anthology's PDF archive (L98-1063 404s)
-    "ding2023_peft":                [],  # Nature MI; the arXiv version carries a different title
+    "bagga1998_bcubed":             [],  # bibliography gives L98-1063, which 404s: LREC 1998
+                                         # predates the Anthology's PDF archive
+    "ding2023_peft":                [],  # arXiv 2203.06904 was tried and REJECTED by the title
+                                         # check: same work, published there as "Delta Tuning"
 }
+
+
+if __name__ == "__main__":
+    print(f"{len(SOURCES)} fetchable, {len(MANUAL)} manual, "
+          f"{sum(1 for v in CANDIDATES.values() if v)} candidate URLs")
