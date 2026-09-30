@@ -220,3 +220,7 @@ qdrant_storage/
 data/
 qdrant_storage/
 .venv/
+myenv/
+
+# Private planning notes (interview/resume prep)
+ROADMAP.md

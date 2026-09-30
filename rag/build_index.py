@@ -1,4 +1,9 @@
-"""Embed chunks, index them in Qdrant, and run a similarity search."""
+"""Embed chunks and index them in Qdrant.
+
+Querying lives in rag/retriever.py, not here — this module only builds the index.
+An earlier `search()` helper here was the second of five retrieval paths in the
+codebase and is deliberately gone (see docs/decisions/001-unified-retrieval-path.md).
+"""
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
@@ -42,12 +47,11 @@ def build_index(client: QdrantClient, model: SentenceTransformer) -> int:
     return len(chunks)
 
 
-def search(client: QdrantClient, model: SentenceTransformer, query: str, k: int = 3):
-    vector = model.encode(query, normalize_embeddings=True).tolist()
-    return client.query_points(collection_name=COLLECTION, query=vector, limit=k).points
-
-
 def main() -> None:
+    # Imported here, not at module scope: retriever.py imports this module's
+    # constants, so a top-level import would be circular.
+    from rag.retriever import DenseRetriever
+
     model = SentenceTransformer(MODEL_NAME)
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 
@@ -59,9 +63,9 @@ def main() -> None:
 
     query = "What is language identification from audio?"
     print(f"Query: {query}\n")
-    for rank, hit in enumerate(search(client, model, query), start=1):
-        text = hit.payload["text"].replace("\n", " ")
-        print(f"#{rank}  {hit.score:.3f}  {hit.payload['source']}")
+    for rank, chunk in enumerate(DenseRetriever().retrieve_chunks(query, k=3), start=1):
+        text = chunk.text.replace("\n", " ")
+        print(f"#{rank}  {chunk.score:.3f}  {chunk.source}")
         print(f"    {text[:220]} ...\n")
 
 

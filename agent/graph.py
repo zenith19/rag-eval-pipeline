@@ -41,10 +41,10 @@ class GraphState(TypedDict):
 
 
 def retrieve(state: GraphState) -> dict:
-    hits = retrieve_chunks(state["question"], state["k"])
+    chunks = retrieve_chunks(state["question"], state["k"])
     return {
-        "chunks": hits,
-        "sources": [h.payload["chunk_id"] for h in hits],
+        "chunks": chunks,
+        "sources": [c.chunk_id for c in chunks],
         "attempts": state["attempts"] + 1,
     }
 

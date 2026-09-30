@@ -1,9 +1,10 @@
-"""Print top candidate chunks per question to help build the eval set by hand."""
+"""Print top candidate chunks per question to help build the eval set by hand.
 
-from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
+Uses the same DenseRetriever the eval harness scores, so hand-picked labels are
+drawn from exactly the ranking that will be evaluated.
+"""
 
-from rag.build_index import COLLECTION, MODEL_NAME, QDRANT_HOST, QDRANT_PORT
+from rag.retriever import DenseRetriever
 
 QUESTIONS = [
     "What is the BenCoref dataset?",
@@ -22,19 +23,14 @@ TOP_K = 8
 
 
 def main() -> None:
-    model = SentenceTransformer(MODEL_NAME)
-    client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+    retriever = DenseRetriever()
 
     for question in QUESTIONS:
         print("=" * 72)
         print(f"Q: {question}\n")
-        vector = model.encode(question, normalize_embeddings=True).tolist()
-        hits = client.query_points(
-            collection_name=COLLECTION, query=vector, limit=TOP_K
-        ).points
-        for hit in hits:
-            text = hit.payload["text"].replace("\n", " ")
-            print(f"  {hit.payload['chunk_id']}  {hit.payload['source']}")
+        for chunk in retriever.retrieve_chunks(question, TOP_K):
+            text = chunk.text.replace("\n", " ")
+            print(f"  {chunk.chunk_id}  {chunk.source}")
             print(f"     {text[:110]} ...\n")
 
 

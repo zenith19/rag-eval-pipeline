@@ -67,7 +67,7 @@ def load_eval_set(path: str | Path) -> list[EvalExample]:
 
 # --------------------------------------------------------------------------- #
 # Retriever interface — implement this around Qdrant (or BM25, or hybrid).
-# See QdrantDenseRetriever at the bottom for a reference implementation.
+# The project's implementation is rag/retriever.py: DenseRetriever.
 # --------------------------------------------------------------------------- #
 
 class Retriever(Protocol):
@@ -177,37 +177,12 @@ def evaluate(
 
 
 # --------------------------------------------------------------------------- #
-# Reference Retriever implementation against Qdrant + sentence-transformers.
-# Imports are LOCAL so this module runs without those packages installed
-# (e.g. for the self-check below). Adapt collection name / payload key to your
-# ingestion code, then: report = evaluate(QdrantDenseRetriever("esg_chunks"), eval_set)
+# There is deliberately NO retriever implementation in this module. The harness
+# is decoupled from the store: anything with a .retrieve(query, k) -> list[str]
+# satisfies the protocol above. The project's implementation lives in
+# rag/retriever.py, and is the single retrieval path the API and agent also use
+# (see docs/decisions/001-unified-retrieval-path.md).
 # --------------------------------------------------------------------------- #
-
-class QdrantDenseRetriever:
-    def __init__(
-        self,
-        collection: str,
-        model_name: str = "BAAI/bge-small-en-v1.5",
-        host: str = "localhost",
-        port: int = 6333,
-        id_payload_key: str = "chunk_id",
-    ) -> None:
-        from qdrant_client import QdrantClient
-        from sentence_transformers import SentenceTransformer
-
-        self._client = QdrantClient(host=host, port=port)
-        self._model = SentenceTransformer(model_name)
-        self._collection = collection
-        self._id_key = id_payload_key
-
-    def retrieve(self, query: str, k: int) -> list[str]:
-        vector = self._model.encode(query, normalize_embeddings=True).tolist()
-        hits = self._client.query_points(
-            collection_name=self._collection,
-            query=vector,
-            limit=k,
-        ).points
-        return [h.payload[self._id_key] for h in hits]
 
 
 # --------------------------------------------------------------------------- #
