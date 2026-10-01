@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Shared pre-commit checks. Enable once per clone:  git config core.hooksPath .githooks
+#
+# Deliberately fast (~3s). The full suite, including integration tests that need
+# Qdrant, runs in CI — a hook people disable because it is slow protects nothing.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+PY=.venv/bin/python
+[ -x "$PY" ] || PY=python3
+fail=0
+
+echo "pre-commit: fast tests"
+if ! "$PY" -m pytest tests/ -q -m "not integration" >/tmp/pc-tests.log 2>&1; then
+    tail -20 /tmp/pc-tests.log
+    fail=1
+fi
+
+echo "pre-commit: duplicate dict keys"
+if ! "$PY" - <<'PYEOF'
+import ast, pathlib, sys
+bad = False
+for f in list(pathlib.Path(".").rglob("*.py")):
+    if any(p in f.parts for p in (".venv", "myenv", ".git")):
+        continue
+    try:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        print(f"{f}: syntax error: {e}"); bad = True; continue
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            keys = [k.value for k in node.keys if isinstance(k, ast.Constant)]
+            dupes = {k for k in keys if keys.count(k) > 1}
+            if dupes:
+                print(f"{f}:{node.lineno}: duplicate dict key(s): {sorted(dupes)}")
+                bad = True
+sys.exit(1 if bad else 0)
+PYEOF
+then
+    fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+    echo
+    echo "pre-commit FAILED. Fix, or bypass deliberately with: git commit --no-verify"
+    exit 1
+fi
+echo "pre-commit: ok"

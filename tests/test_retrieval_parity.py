@@ -8,7 +8,9 @@ tests fail if a second retrieval path is ever reintroduced.
 import pytest
 
 import rag.build_index as build_index
-from rag.generate import answer_question, retrieve_chunks
+
+# rag.generate pulls in sentence_transformers (~13s). It is imported inside the
+# integration tests so the fast subset — and the pre-commit hook — stay quick.
 
 QUERY = "What is the BenCoref dataset?"
 K = 5
@@ -25,6 +27,8 @@ def test_build_index_exposes_no_search_helper():
 @pytest.mark.integration
 def test_eval_and_generation_paths_return_identical_chunks(retriever):
     """The IDs the eval harness scores are the IDs generation actually uses."""
+    from rag.generate import retrieve_chunks
+
     eval_ids = retriever.retrieve(QUERY, K)
     generation_ids = [c.chunk_id for c in retrieve_chunks(QUERY, K)]
     assert eval_ids == generation_ids
@@ -37,6 +41,8 @@ def test_answer_sources_match_the_retriever(retriever, monkeypatch):
 
     Generation is stubbed — this asserts the retrieval half without calling Bedrock.
     """
+    from rag.generate import answer_question
+
     monkeypatch.setattr("rag.generate.generate_from_chunks", lambda q, chunks: "stub answer")
     _answer, sources = answer_question(QUERY, K)
     assert sources == retriever.retrieve(QUERY, K)

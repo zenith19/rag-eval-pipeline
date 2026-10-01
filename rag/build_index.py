@@ -5,11 +5,15 @@ An earlier `search()` helper here was the second of five retrieval paths in the
 codebase and is deliberately gone (see docs/decisions/001-unified-retrieval-path.md).
 """
 
+from typing import TYPE_CHECKING
+
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
-from sentence_transformers import SentenceTransformer
 
 from rag.ingest import load_chunks
+
+if TYPE_CHECKING:  # import costs ~13s (torch); only needed when actually indexing
+    from sentence_transformers import SentenceTransformer
 
 COLLECTION = "documents"
 MODEL_NAME = "BAAI/bge-small-en-v1.5"
@@ -18,7 +22,7 @@ QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333
 
 
-def build_index(client: QdrantClient, model: SentenceTransformer) -> int:
+def build_index(client: QdrantClient, model: "SentenceTransformer") -> int:
     chunks = load_chunks()
     if not chunks:
         return 0
@@ -48,8 +52,12 @@ def build_index(client: QdrantClient, model: SentenceTransformer) -> int:
 
 
 def main() -> None:
-    # Imported here, not at module scope: retriever.py imports this module's
-    # constants, so a top-level import would be circular.
+    # Both imported here, not at module scope. retriever.py imports this
+    # module's constants, so a top-level import would be circular — and
+    # sentence_transformers costs ~13s, which every consumer of those constants
+    # would otherwise pay just to read a hostname.
+    from sentence_transformers import SentenceTransformer
+
     from rag.retriever import DenseRetriever
 
     model = SentenceTransformer(MODEL_NAME)
