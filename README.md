@@ -22,14 +22,14 @@ Recall@k is the fraction of relevant chunks found in the top k; hit-rate@k is wh
 least one relevant chunk is in the top k; MRR is the mean reciprocal rank of the first
 relevant chunk.
 
-| k   | recall@k | hit-rate@k |     | 9-paper corpus |
-|-----|----------|------------|-----|----------------|
-| 1   | 0.35     | 0.70       |     | 0.35 / 0.70    |
-| 3   | 0.55     | 0.80       |     | 0.65 / 0.80    |
-| 5   | 0.70     | 0.90       |     | 0.80 / 0.90    |
-| 10  | 0.75     | 0.90       |     | 0.95 / 1.00    |
-| 20  | 0.85     | 0.90       |     | —              |
-| 50  | 0.95     | 1.00       |     | —              |
+| k  | recall@k | hit-rate@k | recall@k (9 papers) | hit-rate@k (9 papers) |
+|----|----------|------------|---------------------|-----------------------|
+| 1  | 0.35     | 0.70       | 0.35                | 0.70                  |
+| 3  | 0.55     | 0.80       | 0.65                | 0.80                  |
+| 5  | 0.70     | 0.90       | 0.80                | 0.90                  |
+| 10 | 0.75     | 0.90       | 0.95                | 1.00                  |
+| 20 | 0.85     | 0.90       | —                   | —                     |
+| 50 | 0.95     | 1.00       | —                   | —                     |
 
 **MRR: 0.77** (0.79 on the 9-paper corpus).
 
@@ -37,8 +37,9 @@ The corpus was expanded from 9 papers to the 48 that make up the underlying lite
 review, and the numbers were re-measured rather than quietly kept. The result is more
 interesting than a uniform decline:
 
-- **Top-1 did not move.** recall@1 is still 0.35 and hit-rate@1 still 0.70, despite five
-  times as many near-identical coreference papers competing for the top slot.
+- **Top-1 did not move.** recall@1 is still 0.35 and hit-rate@1 still 0.70, despite more
+  than five times as many documents competing for the top slot — including a dozen further
+  coreference papers covering much the same ground.
 - **Depth collapsed.** recall@10 fell 0.95 → 0.75. Gold chunks are not lost — they are
   pushed deeper. Reaching the coverage that k=10 used to give now takes k=50
   (recall@50 0.95, hit-rate@50 1.00).
