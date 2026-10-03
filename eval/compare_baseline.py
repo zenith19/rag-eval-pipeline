@@ -9,6 +9,7 @@ same script serves the R3 CI regression gate. Improvements never fail.
 
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 
 from eval.eval_harness import evaluate, load_eval_set
@@ -58,6 +59,10 @@ def main() -> int:
 
     if args.update:
         base["metrics"] = {k: v for k, v in now.items() if not k.startswith("_")}
+        base["eval_set"]["questions"] = now["_n"]
+        # Stamp the date, so a baseline can't claim to be older (and more
+        # established) than the run that actually produced it.
+        base["recorded"] = date.today().isoformat()
         BASELINE.write_text(json.dumps(base, indent=2) + "\n")
         print(f"\nbaseline updated — record WHY in the commit message")
         return 0
