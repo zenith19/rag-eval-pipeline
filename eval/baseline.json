@@ -1,13 +1,29 @@
 {
   "_comment": "Committed retrieval baseline. /eval compares against this. Update it deliberately, in the same PR as the change that moved it, with the reason in the commit message.",
-  "corpus": {"papers": 9, "chunks": 249},
-  "eval_set": {"path": "eval/eval_set.jsonl", "questions": 10},
+  "corpus": {
+    "papers": 48,
+    "chunks": 1688
+  },
+  "eval_set": {
+    "path": "eval/eval_set.jsonl",
+    "questions": 10
+  },
   "metrics": {
-    "mrr": 0.787,
-    "recall_at_k": {"1": 0.35, "3": 0.65, "5": 0.8, "10": 0.95},
-    "hit_rate_at_k": {"1": 0.7, "3": 0.8, "5": 0.9, "10": 1.0}
+    "mrr": 0.77,
+    "recall_at_k": {
+      "1": 0.35,
+      "3": 0.55,
+      "5": 0.7,
+      "10": 0.75
+    },
+    "hit_rate_at_k": {
+      "1": 0.7,
+      "3": 0.8,
+      "5": 0.9,
+      "10": 0.9
+    }
   },
   "tolerance": 0.03,
-  "recorded": "2026-10-02",
-  "note": "Pre-expansion baseline. The corpus on disk is already 48 papers; this reflects the index as last built (9 papers). Expect recall@1 to fall when the index is rebuilt - more near-identical papers compete for rank 1."
+  "recorded": "2026-10-03",
+  "note": "Post-expansion baseline over the full 48-paper literature review. recall@1 held at 0.35 but depth collapsed (recall@10 0.95 -> 0.75); reaching the old k=10 coverage now needs k=50. See docs/decisions/004. Only 10 questions, so treat as directional: R2 freezes a ~40-question set before any comparison."
 }
