@@ -27,9 +27,15 @@ class DenseRetriever:
         return [
             Chunk(
                 chunk_id=hit.payload["chunk_id"],
+                # .get() for provenance: an index built before R1 Step 3 has no
+                # page/section in its payload, and a stale index should degrade
+                # to "no provenance", not crash the API.
+                document_id=hit.payload.get("document_id", ""),
                 source=hit.payload["source"],
                 text=hit.payload["text"],
                 score=hit.score,
+                page=hit.payload.get("page"),
+                section=hit.payload.get("section"),
             )
             for hit in hits
         ]
