@@ -31,8 +31,12 @@ _NUMBERED_HEADING = re.compile(r"^\s*(\d+(?:\.\d+)*)\.?\s+([A-Z][^\n]{2,60})\s*$
 # Reference lines masquerade as numbered headings ("6659 IEEE, 2013." was picked up
 # 15 times). Two cheap filters: real section numbers are small, and headings don't
 # carry years, DOIs or page ranges.
-_MAX_SECTION_NUMBER = 30
-_CITATION_ISH = re.compile(r"(?:19|20)\d{2}|doi|arxiv|\bpp\.|\bvol\.", re.IGNORECASE)
+_MAX_SECTION_NUMBER = 20
+# "et al" catches numbered bibliography entries such as "30 Rhea Sukthanker et al",
+# which otherwise look exactly like a numbered heading.
+_CITATION_ISH = re.compile(
+    r"(?:19|20)\d{2}|doi|arxiv|\bpp\.|\bvol\.|\bet al\b", re.IGNORECASE
+)
 _NAMED_HEADING = re.compile(
     r"^\s*(abstract|introduction|related work|background|method(?:s|ology)?|"
     r"experimental setup|experiments?|results?|analysis|discussion|"

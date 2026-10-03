@@ -74,3 +74,21 @@ def test_real_pdf_text_is_unchanged_by_page_tracking():
     assert [p for p, _, _ in spans] == list(range(1, len(spans) + 1))
     for _page, start, end in spans:
         assert 0 <= start <= end <= len(text)
+
+
+def test_citation_never_contains_a_newline():
+    """Six corpus filenames contain literal newlines; a citation must stay on one line."""
+    from rag.types import Chunk
+
+    messy = "BenCoref: A Multi-Domain Dataset of Nominal Phrases and Pronominal\nReference Annotations.pdf"
+    cite = Chunk(chunk_id="a", document_id="d", source=messy, text="t", score=0.7, page=3).cite()
+    assert "\n" not in cite
+    assert cite.endswith(" p.3")
+
+
+def test_numbered_bibliography_entries_are_not_sections():
+    """"30 Rhea Sukthanker et al" is a reference line, not a heading — seen in the real corpus."""
+    from rag.ingest import _CITATION_ISH, _plausible_section_number
+
+    assert _CITATION_ISH.search("30 Rhea Sukthanker et al")
+    assert not _plausible_section_number("30")

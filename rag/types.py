@@ -11,6 +11,7 @@ over headings in extracted text and is advisory only: present it as context,
 never as an authoritative citation. See docs/decisions/004.
 """
 
+import re
 from dataclasses import dataclass
 
 
@@ -27,5 +28,11 @@ class Chunk:
     section: str | None = None
 
     def cite(self) -> str:
-        """Human-readable provenance for an answer, e.g. 'hu2022_lora.pdf p.3'."""
-        return f"{self.source} p.{self.page}" if self.page else self.source
+        """Human-readable provenance, e.g. 'hu2022_lora.pdf p.3'.
+
+        Whitespace is collapsed because six of the original corpus filenames
+        contain literal newlines, which would otherwise split a citation across
+        lines in an API response or on the page.
+        """
+        source = re.sub(r"\s+", " ", self.source).strip()
+        return f"{source} p.{self.page}" if self.page else source
