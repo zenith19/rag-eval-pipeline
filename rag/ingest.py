@@ -8,7 +8,6 @@ from pathlib import Path
 
 import boto3
 from pypdf import PdfReader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 DATA_DIR = Path("data")
 S3_BUCKET = os.environ.get("RAG_S3_BUCKET")  # if set, read PDFs from S3; otherwise from data/
@@ -44,6 +43,12 @@ def make_chunk_id(source: str, index: int) -> str:
 
 
 def load_chunks() -> list[dict]:
+    # Imported here, not at module scope: langchain_text_splitters costs ~11s to
+    # import (it pulls in LangChain core) and is only needed when building the
+    # index. Importing it at module level made every consumer pay for it —
+    # including the API, which never chunks anything at query time.
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
