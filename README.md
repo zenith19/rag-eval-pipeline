@@ -17,25 +17,50 @@ a minimal **LangGraph** agent.
 
 ## Retrieval results
 
-Measured on a hand-labeled set of 10 questions over a corpus of 9 papers (249 chunks).
+Measured on a hand-labeled set of 10 questions over a corpus of 48 papers (1,688 chunks).
 Recall@k is the fraction of relevant chunks found in the top k; hit-rate@k is whether at
 least one relevant chunk is in the top k; MRR is the mean reciprocal rank of the first
 relevant chunk.
 
-| k  | recall@k | hit-rate@k |
-|----|----------|------------|
-| 1  | 0.35     | 0.70       |
-| 3  | 0.65     | 0.80       |
-| 5  | 0.80     | 0.90       |
-| 10 | 0.95     | 1.00       |
+| k  | recall@k | hit-rate@k | recall@k (9 papers) | hit-rate@k (9 papers) |
+|----|----------|------------|---------------------|-----------------------|
+| 1  | 0.35     | 0.70       | 0.35                | 0.70                  |
+| 3  | 0.55     | 0.80       | 0.65                | 0.80                  |
+| 5  | 0.70     | 0.90       | 0.80                | 0.90                  |
+| 10 | 0.75     | 0.90       | 0.95                | 1.00                  |
+| 20 | 0.85     | 0.90       | —                   | —                     |
+| 50 | 0.95     | 1.00       | —                   | —                     |
 
-**MRR: 0.79.** Finding the relevant material is close to solved (recall@10 0.95,
-hit-rate@10 1.00), but precise ranking at position 1 is the bottleneck (recall@1 0.35) —
-the corpus contains several closely related papers whose chunks compete for the top slot.
-A cross-encoder reranker or hybrid (dense + sparse) search is the natural next step. (Some
-questions are labeled with more than one relevant chunk, which caps their attainable
-recall@1; hit-rate@1 of 0.70 — the right paper ranked first — is the more representative
-single-result figure.)
+**MRR: 0.77** (0.79 on the 9-paper corpus).
+
+The corpus was expanded from 9 papers to the 48 that make up the underlying literature
+review, and the numbers were re-measured rather than quietly kept. The result is more
+interesting than a uniform decline:
+
+- **Top-1 did not move.** recall@1 is still 0.35 and hit-rate@1 still 0.70, despite more
+  than five times as many documents competing for the top slot — including a dozen further
+  coreference papers covering much the same ground.
+- **Depth collapsed.** recall@10 fell 0.95 → 0.75. Gold chunks are not lost — they are
+  pushed deeper. Reaching the coverage that k=10 used to give now takes k=50
+  (recall@50 0.95, hit-rate@50 1.00).
+
+That changes what the next step should be. The earlier reading — "coverage is solved,
+ranking is the bottleneck" — held when recall@10 was 0.95. It no longer does at the depth a
+cross-encoder reranker typically works over: at k=20 recall is 0.85, so a reranker fed the
+top 20 candidates cannot recover 15% of the relevant material no matter how good it is. The
+reranker experiment therefore has to treat the candidate-pool size as a parameter to
+measure, not assume. Hybrid (dense + sparse) search is still not obviously required:
+hit-rate@50 of 1.00 says dense retrieval does find every question's evidence eventually.
+
+Caveat, stated plainly: this is 10 questions. Each one is 10% of hit-rate, and the moves
+above are one or two questions apiece. The numbers are directionally useful and not
+statistically meaningful — which is why the next release freezes a ~40-question set before
+running any comparison. (Some questions are labeled with more than one relevant chunk,
+which caps their attainable recall@1; hit-rate@1 — the right paper ranked first — is the
+more representative single-result figure.)
+
+Reproduce with `python -m eval.run_eval`, or check against the committed baseline with
+`python -m eval.compare_baseline`.
 
 The metrics are implemented from scratch (`eval/eval_harness.py`) and verified against
 hand-computed values, rather than imported from an evaluation library.
