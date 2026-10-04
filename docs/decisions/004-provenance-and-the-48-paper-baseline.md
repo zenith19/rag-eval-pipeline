@@ -36,14 +36,30 @@ early versions were confidently wrong:
 | `1 I NTRODUCTION` | small caps extract as a split initial glyph run |
 | `0.63532 The highest result obtained from CNN…` | a results-table row |
 | `08 Workshop on Named Entity Recognition…` | another reference |
+| `30 Rhea Sukthanker et al` | a numbered bibliography entry |
 
-Now filtered by structure: no leading zeros, first component 1–30, at most three levels, no digits
-in the title, and no years/DOIs/page-ranges. **1,587/1,688**, with eight of the ten most common
-values being genuine headings.
+Now filtered by structure: no leading zeros, first component 1–20 (no paper here has twenty
+top-level sections), at most three levels, no digits in the title, and no years, DOIs, page ranges
+or "et al". **1,587/1,688**, with eight of the ten most common values being genuine headings.
 
 Residual noise remains (`3.1 M: and while it's there it`), so **section is advisory and page is
 authoritative**. `Chunk.cite()` uses only source and page. Making sections trustworthy needs a
 layout-aware parser such as GROBID, not a better regex; that is deferred, not solved.
+
+## What only running it caught
+
+The last two defects were invisible to the test suite, because both were about what the output
+*looks like* rather than whether the code runs. A single real query surfaced them:
+
+- `Chunk.cite()` emitted citations containing a literal newline — six of the original filenames
+  contain one — so a citation broke across two lines in any response. Whitespace is now collapsed
+  at display time; the filename itself stays untouched, because renaming it would invalidate the
+  gold labels.
+- `30 Rhea Sukthanker et al` was reported as a section on page 31 of the anaphora review.
+
+Unit tests asserted `_clean_heading` and `_plausible_section_number` behaved correctly, and they
+did. The faults were in the composition. Worth remembering when the demo page lands in Step 4:
+looking at real output is a different check from running tests, and it finds different bugs.
 
 ## Measured validation — and a prediction that was wrong
 
