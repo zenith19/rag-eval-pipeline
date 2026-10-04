@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from rag.config import COLLECTION, MODEL_NAME, QDRANT_HOST, QDRANT_PORT, VECTOR_SIZE
+from rag.config import COLLECTION, MODEL_NAME, VECTOR_SIZE, make_client
 from rag.ingest import load_chunks
 
 if TYPE_CHECKING:  # import costs ~13s (torch); only needed when actually indexing
@@ -55,7 +55,7 @@ def main() -> None:
     from rag.retriever import DenseRetriever
 
     model = SentenceTransformer(MODEL_NAME)
-    client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+    client = make_client()
 
     indexed = build_index(client, model)
     if not indexed:
@@ -63,7 +63,14 @@ def main() -> None:
         return
     print(f"Indexed {indexed} chunks.\n")
 
-    query = "What is language identification from audio?"
+    # Embedded Qdrant holds an exclusive lock on its directory, so the demo
+    # below — which constructs its own client via DenseRetriever — cannot run
+    # until this one lets go. Against a server the close is a no-op; embedded,
+    # skipping it fails the Docker build with "already accessed by another
+    # instance of Qdrant client".
+    client.close()
+
+    query = "How is coreference resolution evaluated?"
     print(f"Query: {query}\n")
     for rank, chunk in enumerate(DenseRetriever().retrieve_chunks(query, k=3), start=1):
         text = chunk.text.replace("\n", " ")
