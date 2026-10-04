@@ -12,7 +12,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from evaluation.eval_harness import evaluate, load_eval_set
+from evaluation.eval_harness import DEFAULT_EVAL_SET, evaluate, load_eval_set
 from rag.retriever import DenseRetriever
 
 BASELINE = Path(__file__).resolve().parent / "baseline.json"
@@ -20,7 +20,7 @@ K_VALUES = (1, 3, 5, 10)
 
 
 def _current() -> dict:
-    eval_set = load_eval_set(Path(__file__).resolve().parent / "eval_set.jsonl")
+    eval_set = load_eval_set(DEFAULT_EVAL_SET)
     report = evaluate(DenseRetriever(), eval_set, k_values=K_VALUES)
     return {
         "mrr": round(report.mrr, 3),

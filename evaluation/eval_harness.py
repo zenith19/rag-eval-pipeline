@@ -25,6 +25,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+# Anchored to this package, not the working directory. run_eval, compare_baseline
+# and the MCP server all need it, and an MCP client may launch the server from
+# anywhere; a relative path silently breaks there.
+DEFAULT_EVAL_SET = Path(__file__).resolve().parent / "eval_set.jsonl"
+
 # --------------------------------------------------------------------------- #
 # Data model
 # --------------------------------------------------------------------------- #
