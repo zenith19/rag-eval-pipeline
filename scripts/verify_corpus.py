@@ -21,7 +21,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from corpus_sources import CANDIDATES, SOURCES  # noqa: E402
-
 from pypdf import PdfReader  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "corpus_manifest.csv"
@@ -110,7 +109,7 @@ def main() -> None:
     print(f"\n{len(kept)}/{len(SOURCES)} verified into {MANIFEST.name}")
     if rejected:
         print(f"\n{len(rejected)} rejected or still missing:")
-        for key, url, why in rejected:
+        for key, _url, why in rejected:
             print(f"  {key:<34} {why}")
 
 

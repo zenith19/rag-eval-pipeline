@@ -9,7 +9,7 @@ production serves — they cannot drift apart.
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 
-from rag.build_index import COLLECTION, MODEL_NAME, QDRANT_HOST, QDRANT_PORT
+from rag.config import COLLECTION, MODEL_NAME, QDRANT_HOST, QDRANT_PORT
 from rag.types import Chunk
 
 

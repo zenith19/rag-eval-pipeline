@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rag-eval-pipeline"
+version = "0.1.0"
+description = "Grounded QA over a research-paper corpus, built around a from-scratch retrieval evaluation harness"
+requires-python = ">=3.12"
+dependencies = [
+    "pypdf",
+    "langchain-text-splitters",
+    "sentence-transformers",
+    "qdrant-client",
+    "boto3",
+    "fastapi",
+    "uvicorn",
+    "mcp[cli]",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+agent = ["langgraph"]
+
+[tool.setuptools]
+packages = ["rag", "api", "agent", "evaluation", "mcp_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: needs the Qdrant container running"]
+
+[tool.ruff]
+line-length = 110
+exclude = [".venv", "myenv", "qdrant_storage"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts add the repo root to sys.path before importing siblings, so their
+# imports cannot all sit at the top of the file.
+"scripts/*.py" = ["E402"]
+# A data file: paper titles are copied verbatim from the bibliography and must
+# not be reflowed to satisfy a line limit.
+"scripts/corpus_sources.py" = ["E402", "E501"]
+"mcp_server/server.py" = ["E402"]
+# Tests deliberately reach for private helpers — that is what they are testing.
+"tests/*.py" = ["E402"]

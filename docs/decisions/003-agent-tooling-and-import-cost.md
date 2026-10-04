@@ -18,7 +18,7 @@ Three small, used artifacts rather than an elaborate unused set:
 
 - **`CLAUDE.md`** — environment, four invariants whose violation corrupts data *silently*, the
   commands, and the conventions.
-- **`/eval` skill** plus `eval/baseline.json` and `eval/compare_baseline.py` — the eval loop is
+- **`/eval` skill** plus `evaluation/baseline.json` and `evaluation/compare_baseline.py` — the eval loop is
   about to run repeatedly, and a committed baseline turns "did that help?" into a diff. The same
   script becomes the R3 CI regression gate.
 - **Two hooks, deliberately different in kind.** A Claude Code `PreToolUse` hook blocks edits to
