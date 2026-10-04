@@ -1,6 +1,6 @@
 """Unit tests for the from-scratch retrieval metrics. No infrastructure needed."""
 
-from eval.eval_harness import hit_rate_at_k, recall_at_k, reciprocal_rank
+from evaluation.eval_harness import hit_rate_at_k, recall_at_k, reciprocal_rank
 
 
 def test_recall_counts_all_relevant_not_just_one():

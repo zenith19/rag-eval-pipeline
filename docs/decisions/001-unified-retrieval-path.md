@@ -12,7 +12,7 @@ issued or unpacked a Qdrant query:
 |---|---|
 | `rag/retriever.py: DenseRetriever.retrieve` | eval harness, MCP `evaluate_retrieval` |
 | `rag/build_index.py: search()` | `generate.py` → FastAPI `/ask` → LangGraph agent |
-| `eval/eval_harness.py: QdrantDenseRetriever` | nothing — a third copy, dead |
+| `evaluation/eval_harness.py: QdrantDenseRetriever` | nothing — a third copy, dead |
 | `mcp_server/server.py: search_documents` | reached into `_retriever._client` / `_model` |
 | `rag/label_helper.py` | its own client + model, used to pick gold labels |
 

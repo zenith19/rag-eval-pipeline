@@ -20,7 +20,7 @@ The numbers in the README are a claim. This re-checks it.
    **and say so in the report**, because a rebuild changes what every gold label points at.
 3. **Compare against the baseline:**
    ```bash
-   .venv/bin/python -m eval.compare_baseline
+   .venv/bin/python -m evaluation.compare_baseline
    ```
 4. **Report** the table, and for anything outside tolerance say *why* it moved. A drop is not
    automatically a bug — expanding the corpus should lower recall@1, and that is a finding, not
@@ -31,10 +31,10 @@ The numbers in the README are a claim. This re-checks it.
 Only when the move is understood and intended:
 
 ```bash
-.venv/bin/python -m eval.compare_baseline --update
+.venv/bin/python -m evaluation.compare_baseline --update
 ```
 
-Update `eval/baseline.json`'s `corpus` block by hand in the same edit, update the results table in
+Update `evaluation/baseline.json`'s `corpus` block by hand in the same edit, update the results table in
 `README.md`, and record the reason in the commit message. A baseline moved without explanation is
 worse than no baseline.
 

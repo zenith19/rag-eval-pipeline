@@ -33,18 +33,20 @@ Decisions live in `docs/decisions/`.
 ```bash
 docker compose up -d                        # Qdrant
 .venv/bin/python -m rag.build_index         # (re)build the index — needed after corpus changes
-.venv/bin/python -m eval.run_eval           # score retrieval
+.venv/bin/python -m evaluation.run_eval           # score retrieval
 .venv/bin/python -m pytest tests/ -q        # full suite (integration tests skip without Qdrant)
 .venv/bin/python -m pytest tests/ -q -m "not integration"   # fast subset
 .venv/bin/uvicorn api.main:app --reload     # API
 .venv/bin/python scripts/fetch_corpus.py --dry-run          # corpus, without downloading
 git config core.hooksPath .githooks          # enable the shared pre-commit hook (once per clone)
+.venv/bin/pip install -e ".[dev]"           # install the package plus pytest + ruff
+.venv/bin/python -m ruff check .            # lint (same command CI runs)
 ```
 
 ## Agent tooling
 
 - `/eval` (`.claude/skills/eval/SKILL.md`) — runs the retrieval eval against the committed
-  baseline in `eval/baseline.json` and reports the delta. Never update the baseline to turn a
+  baseline in `evaluation/baseline.json` and reports the delta. Never update the baseline to turn a
   red run green.
 - `.claude/hooks/protect-corpus.sh` — a PreToolUse hook that blocks edits to `data/*.pdf`,
   enforcing invariant 2 above. Adding files stays allowed.
@@ -56,9 +58,11 @@ git config core.hooksPath .githooks          # enable the shared pre-commit hook
 ## Conventions
 
 - One PR per step of the plan; squash merge, keeping the first commit message.
+- Configuration lives in `rag/config.py`, never in `build_index.py` — the retriever must not
+  import the indexer to learn a hostname.
 - Any non-obvious decision gets `docs/decisions/NNN-*.md`:
   observation → hypothesis → decision → trade-off → measured validation.
 - Claims about quality come with a measurement. No number in the README that isn't reproducible
-  by `eval/run_eval.py`.
+  by `evaluation/run_eval.py`.
 - Imports that cost seconds belong inside the function that needs them — `langchain_text_splitters`
   alone costs ~11s and was being paid by the API, which never chunks anything.

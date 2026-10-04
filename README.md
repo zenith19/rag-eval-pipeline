@@ -59,10 +59,10 @@ running any comparison. (Some questions are labeled with more than one relevant 
 which caps their attainable recall@1; hit-rate@1 — the right paper ranked first — is the
 more representative single-result figure.)
 
-Reproduce with `python -m eval.run_eval`, or check against the committed baseline with
-`python -m eval.compare_baseline`.
+Reproduce with `python -m evaluation.run_eval`, or check against the committed baseline with
+`python -m evaluation.compare_baseline`.
 
-The metrics are implemented from scratch (`eval/eval_harness.py`) and verified against
+The metrics are implemented from scratch (`evaluation/eval_harness.py`) and verified against
 hand-computed values, rather than imported from an evaluation library.
 
 ## Architecture
@@ -102,36 +102,46 @@ retrieval strategy is measured and exposed through one code path with no duplica
 ```
 rag-eval-pipeline/
 ├── rag/
-│   ├── ingest.py         # load PDFs (S3 or local), chunk, assign stable IDs
+│   ├── config.py         # shared settings (collection, model, Qdrant endpoint)
+│   ├── types.py          # Chunk: the currency between retrieval and everything downstream
+│   ├── ingest.py         # load PDFs (S3 or local), chunk, attach page/section provenance
 │   ├── build_index.py    # embed chunks and index them in Qdrant
-│   ├── retriever.py      # dense retriever returning ranked chunk IDs
+│   ├── retriever.py      # the single retrieval path, used by eval and serving alike
 │   ├── generate.py       # retrieve context and generate an answer via Bedrock
 │   └── label_helper.py   # utility for building the eval set
 ├── api/
 │   └── main.py           # FastAPI service: GET /health, POST /ask
-├── eval/
-│   ├── eval_harness.py   # recall@k / hit-rate@k / MRR
+├── evaluation/
+│   ├── eval_harness.py   # recall@k / hit-rate@k / MRR, implemented from scratch
 │   ├── eval_set.jsonl    # hand-labeled question → relevant chunk IDs
+│   ├── baseline.json     # committed baseline the eval is compared against
+│   ├── compare_baseline.py  # run the eval and diff it against the baseline
 │   └── run_eval.py       # score the retriever against the eval set
 ├── mcp_server/
 │   └── server.py         # MCP server: search, QA, and eval as agent tools
 ├── agent/
 │   └── graph.py          # LangGraph flow: retrieve → generate → verify, bounded retry
+├── scripts/
+│   ├── corpus_manifest.csv  # the 39 fetched papers, with verified source URLs
+│   └── fetch_corpus.py   # reproduce the corpus from the manifest
+├── tests/                # metrics, chunk-ID stability, provenance, retrieval parity
 ├── docs/
-│   └── PROJECT_PLAN.md   # design rationale and scope
+│   ├── PROJECT_PLAN.md   # design rationale and scope
+│   └── decisions/        # observation → decision → trade-off → measured validation
+├── .githooks/pre-commit  # fast tests + a duplicate-key check, shared via core.hooksPath
 ├── docker-compose.yml    # runs the Qdrant container
-└── requirements.txt
+└── pyproject.toml
 ```
 
 ## Setup
 
-Requires Python 3.10+, Docker, and an AWS account with access to an Amazon Bedrock model
+Requires Python 3.12+, Docker, and an AWS account with access to an Amazon Bedrock model
 and an S3 bucket.
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 Start the Qdrant vector database (runs as a container; data persists in a named volume):
@@ -167,7 +177,7 @@ python -m rag.ingest
 python -m rag.build_index
 
 # 3. Score retrieval against the labeled eval set
-python -m eval.run_eval
+python -m evaluation.run_eval
 
 # 4. Serve the API (interactive docs at http://127.0.0.1:8000/docs)
 uvicorn api.main:app --reload

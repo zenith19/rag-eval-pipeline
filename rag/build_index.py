@@ -10,16 +10,11 @@ from typing import TYPE_CHECKING
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
+from rag.config import COLLECTION, MODEL_NAME, QDRANT_HOST, QDRANT_PORT, VECTOR_SIZE
 from rag.ingest import load_chunks
 
 if TYPE_CHECKING:  # import costs ~13s (torch); only needed when actually indexing
     from sentence_transformers import SentenceTransformer
-
-COLLECTION = "documents"
-MODEL_NAME = "BAAI/bge-small-en-v1.5"
-VECTOR_SIZE = 384
-QDRANT_HOST = "localhost"
-QDRANT_PORT = 6333
 
 
 def build_index(client: QdrantClient, model: "SentenceTransformer") -> int:
@@ -52,10 +47,9 @@ def build_index(client: QdrantClient, model: "SentenceTransformer") -> int:
 
 
 def main() -> None:
-    # Both imported here, not at module scope. retriever.py imports this
-    # module's constants, so a top-level import would be circular — and
-    # sentence_transformers costs ~13s, which every consumer of those constants
-    # would otherwise pay just to read a hostname.
+    # Imported here, not at module scope: sentence_transformers costs ~13s, and
+    # only this demo path and build_index() need it. (The circular-import reason
+    # is gone now that configuration lives in rag/config.py.)
     from sentence_transformers import SentenceTransformer
 
     from rag.retriever import DenseRetriever

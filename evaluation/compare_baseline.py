@@ -3,8 +3,8 @@
 Exits non-zero if any metric falls more than `tolerance` below baseline, so the
 same script serves the R3 CI regression gate. Improvements never fail.
 
-    python -m eval.compare_baseline            # compare
-    python -m eval.compare_baseline --update   # accept current numbers as the new baseline
+    python -m evaluation.compare_baseline            # compare
+    python -m evaluation.compare_baseline --update   # accept current numbers as the new baseline
 """
 
 import argparse
@@ -12,7 +12,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from eval.eval_harness import evaluate, load_eval_set
+from evaluation.eval_harness import evaluate, load_eval_set
 from rag.retriever import DenseRetriever
 
 BASELINE = Path(__file__).resolve().parent / "baseline.json"
@@ -64,7 +64,7 @@ def main() -> int:
         # established) than the run that actually produced it.
         base["recorded"] = date.today().isoformat()
         BASELINE.write_text(json.dumps(base, indent=2) + "\n")
-        print(f"\nbaseline updated — record WHY in the commit message")
+        print("\nbaseline updated — record WHY in the commit message")
         return 0
 
     if regressions:

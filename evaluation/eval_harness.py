@@ -20,10 +20,10 @@ Eval set format (JSONL, one object per line, hand-labeled):
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, Sequence
-
+from typing import Protocol
 
 # --------------------------------------------------------------------------- #
 # Data model
@@ -41,7 +41,7 @@ class EvalExample:
     relevant_chunk_ids: frozenset[str]
 
     @staticmethod
-    def from_dict(d: dict) -> "EvalExample":
+    def from_dict(d: dict) -> EvalExample:
         return EvalExample(
             query=d["query"],
             relevant_chunk_ids=frozenset(d["relevant_chunk_ids"]),
@@ -51,7 +51,7 @@ class EvalExample:
 def load_eval_set(path: str | Path) -> list[EvalExample]:
     """Load a JSONL eval set. Fails loudly on a malformed line (with line number)."""
     examples: list[EvalExample] = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line_no, line in enumerate(f, 1):
             line = line.strip()
             if not line:

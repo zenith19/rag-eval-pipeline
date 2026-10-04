@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP
 
-from eval.eval_harness import evaluate, load_eval_set
+from evaluation.eval_harness import evaluate, load_eval_set
 from rag.generate import answer_question
 from rag.retriever import DenseRetriever
 
@@ -66,7 +66,7 @@ def evaluate_retrieval() -> dict:
     Returns:
         {mrr, per_k} with recall@k and hit_rate@k for k in 1, 3, 5, 10.
     """
-    eval_set = load_eval_set("eval/eval_set.jsonl")
+    eval_set = load_eval_set("evaluation/eval_set.jsonl")
     report = evaluate(_retriever, eval_set, k_values=(1, 3, 5, 10))
     return {
         "queries_evaluated": len(eval_set),
