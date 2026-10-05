@@ -144,3 +144,31 @@ def test_no_baked_index_means_server_mode(monkeypatch):
     monkeypatch.setattr(config, "QDRANT_PATH", None)
     monkeypatch.setattr(config, "QDRANT_BAKED_INDEX", None)
     assert config.index_path() is None
+
+
+def test_stale_staging_directory_does_not_break_the_copy(tmp_path, monkeypatch):
+    """A crash mid-copy leaves a staging directory behind, and PIDs recycle.
+
+    A reused container keeps the same PID, so without cleanup the FileExistsError
+    would repeat on every invocation rather than clearing itself.
+    """
+    import os
+
+    import rag.config as config
+
+    baked = tmp_path / "baked"
+    baked.mkdir()
+    (baked / "meta.json").write_text("{}")
+    writable = tmp_path / "writable"
+
+    stale = tmp_path / f"writable.{os.getpid()}"
+    stale.mkdir()
+    (stale / "half-written.json").write_text("truncated")
+
+    monkeypatch.setattr(config, "QDRANT_PATH", None)
+    monkeypatch.setattr(config, "QDRANT_BAKED_INDEX", str(baked))
+    monkeypatch.setattr(config, "QDRANT_WRITABLE_INDEX", str(writable))
+
+    assert config.index_path() == str(writable)
+    assert (writable / "meta.json").exists()
+    assert not (writable / "half-written.json").exists()

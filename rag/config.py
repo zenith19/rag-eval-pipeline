@@ -46,6 +46,9 @@ def index_path() -> str | None:
 
     if not os.path.isdir(QDRANT_WRITABLE_INDEX):
         staging = f"{QDRANT_WRITABLE_INDEX}.{os.getpid()}"
+        # A crash mid-copy leaves this behind, and PIDs recycle — a reused Lambda
+        # container keeps the same one, so the failure would repeat forever.
+        shutil.rmtree(staging, ignore_errors=True)
         shutil.copytree(QDRANT_BAKED_INDEX, staging)
         try:
             os.rename(staging, QDRANT_WRITABLE_INDEX)

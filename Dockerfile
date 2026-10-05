@@ -43,5 +43,10 @@ COPY api/ api/
 COPY evaluation/ evaluation/
 COPY mcp_server/ mcp_server/
 
+# Drop privileges for serving. The index stage stays root because it has to write
+# /opt/index; this stage only reads it, and copies to /tmp at startup.
+RUN useradd --create-home --uid 10001 app
+USER app
+
 EXPOSE 8000
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
