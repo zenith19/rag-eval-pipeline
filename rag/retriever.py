@@ -6,17 +6,16 @@ of `retrieve_chunks()`, so the IDs the eval scores are by construction the IDs
 production serves — they cannot drift apart.
 """
 
-from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 
-from rag.config import COLLECTION, MODEL_NAME, QDRANT_HOST, QDRANT_PORT
+from rag.config import COLLECTION, MODEL_NAME, make_client
 from rag.types import Chunk
 
 
 class DenseRetriever:
     def __init__(self) -> None:
         self._model = SentenceTransformer(MODEL_NAME)
-        self._client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+        self._client = make_client()
 
     def retrieve_chunks(self, query: str, k: int) -> list[Chunk]:
         """Return up to k chunks, ranked best-first. The only Qdrant query in the codebase."""

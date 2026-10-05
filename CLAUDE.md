@@ -27,6 +27,9 @@ Decisions live in `docs/decisions/`.
    text behind them moves. Treat it as a re-labelling exercise, not a tweak.
 4. **Gold labels are chunk IDs, not text.** The eval harness never needs document content; keep
    it decoupled from the store.
+5. **Embedded Qdrant locks its directory exclusively.** Only one client at a time may hold it, so
+   close one before opening another. `rag/config.make_client()` is the only place that decides
+   between a server and an embedded index — never construct `QdrantClient` directly.
 
 ## Commands
 
@@ -41,6 +44,8 @@ docker compose up -d                        # Qdrant
 git config core.hooksPath .githooks          # enable the shared pre-commit hook (once per clone)
 .venv/bin/pip install -e ".[dev]"           # install the package plus pytest + ruff
 .venv/bin/python -m ruff check .            # lint (same command CI runs)
+docker build -t rag-eval-pipeline .         # image with the index baked in (~9 min: it re-embeds)
+docker run -p 8000:8000 rag-eval-pipeline   # serve from the embedded index, no Qdrant needed
 ```
 
 ## Agent tooling
@@ -60,6 +65,9 @@ git config core.hooksPath .githooks          # enable the shared pre-commit hook
 - One PR per step of the plan; squash merge, keeping the first commit message.
 - Configuration lives in `rag/config.py`, never in `build_index.py` — the retriever must not
   import the indexer to learn a hostname.
+- Runtime behaviour that must hold for *every* process belongs in Python, not in a shell
+  entrypoint: an entrypoint only configures the one process it execs (see `docs/decisions/006`).
+- `docker build` needs `data/` populated; run `scripts/fetch_corpus.py` on a fresh clone first.
 - Any non-obvious decision gets `docs/decisions/NNN-*.md`:
   observation → hypothesis → decision → trade-off → measured validation.
 - Claims about quality come with a measurement. No number in the README that isn't reproducible

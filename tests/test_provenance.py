@@ -92,3 +92,83 @@ def test_numbered_bibliography_entries_are_not_sections():
 
     assert _CITATION_ISH.search("30 Rhea Sukthanker et al")
     assert not _plausible_section_number("30")
+
+
+def test_embedded_index_allows_a_second_client_after_close(tmp_path):
+    """Embedded Qdrant locks its directory exclusively.
+
+    build_index indexes with one client and then demos with another, which fails
+    in embedded mode unless the first is closed. That broke the Docker build, and
+    a server-backed test could never have caught it.
+    """
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Distance, VectorParams
+
+    path = str(tmp_path / "idx")
+    first = QdrantClient(path=path)
+    first.create_collection("t", vectors_config=VectorParams(size=4, distance=Distance.COSINE))
+    first.close()
+
+    second = QdrantClient(path=path)  # would raise if the lock were still held
+    assert second.collection_exists("t")
+    second.close()
+
+
+def test_baked_index_is_copied_somewhere_writable(tmp_path, monkeypatch):
+    """A read-only baked index must be copied before embedded Qdrant can lock it.
+
+    Resolved in Python, not by a shell entrypoint: an entrypoint sets the
+    environment of one process, so `docker exec`, the MCP server and a Lambda
+    handler would all miss it and fall back to a server that is not there.
+    """
+    import rag.config as config
+
+    baked = tmp_path / "baked"
+    baked.mkdir()
+    (baked / "meta.json").write_text("{}")
+    writable = tmp_path / "writable"
+
+    monkeypatch.setattr(config, "QDRANT_PATH", None)
+    monkeypatch.setattr(config, "QDRANT_BAKED_INDEX", str(baked))
+    monkeypatch.setattr(config, "QDRANT_WRITABLE_INDEX", str(writable))
+
+    assert config.index_path() == str(writable)
+    assert (writable / "meta.json").exists()
+    # Second call must not re-copy or fail.
+    assert config.index_path() == str(writable)
+
+
+def test_no_baked_index_means_server_mode(monkeypatch):
+    import rag.config as config
+
+    monkeypatch.setattr(config, "QDRANT_PATH", None)
+    monkeypatch.setattr(config, "QDRANT_BAKED_INDEX", None)
+    assert config.index_path() is None
+
+
+def test_stale_staging_directory_does_not_break_the_copy(tmp_path, monkeypatch):
+    """A crash mid-copy leaves a staging directory behind, and PIDs recycle.
+
+    A reused container keeps the same PID, so without cleanup the FileExistsError
+    would repeat on every invocation rather than clearing itself.
+    """
+    import os
+
+    import rag.config as config
+
+    baked = tmp_path / "baked"
+    baked.mkdir()
+    (baked / "meta.json").write_text("{}")
+    writable = tmp_path / "writable"
+
+    stale = tmp_path / f"writable.{os.getpid()}"
+    stale.mkdir()
+    (stale / "half-written.json").write_text("truncated")
+
+    monkeypatch.setattr(config, "QDRANT_PATH", None)
+    monkeypatch.setattr(config, "QDRANT_BAKED_INDEX", str(baked))
+    monkeypatch.setattr(config, "QDRANT_WRITABLE_INDEX", str(writable))
+
+    assert config.index_path() == str(writable)
+    assert (writable / "meta.json").exists()
+    assert not (writable / "half-written.json").exists()

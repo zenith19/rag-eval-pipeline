@@ -17,11 +17,9 @@ EVAL_SET = DEFAULT_EVAL_SET
 def test_every_labelled_chunk_id_exists_in_the_index():
     # Index inspection (a scroll over stored payloads), not retrieval — the
     # ranked query path stays exclusively in rag/retriever.py.
-    from qdrant_client import QdrantClient
+    from rag.config import COLLECTION, make_client
 
-    from rag.config import COLLECTION, QDRANT_HOST, QDRANT_PORT
-
-    client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+    client = make_client()
     indexed_ids = set()
     offset = None
     while True:
