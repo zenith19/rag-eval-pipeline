@@ -56,6 +56,18 @@ Resolution moved into `rag/config.index_path()`: Python, so it holds however the
 The copy to a writable location (embedded Qdrant writes a `.lock`, and Lambda's `/var/task` is
 read-only) happens there too, once, idempotently. The entrypoint script is deleted.
 
+## Two more things fixed before shipping
+
+**The container ran as root.** It now serves as an unprivileged `app` user. Only the runtime stage
+drops privileges: the index stage needs root to write `/opt/index`, and leaving it root keeps that
+expensive layer cached.
+
+**A stale staging copy would have failed permanently.** `index_path()` copies to
+`/tmp/index.<pid>` before an atomic rename, and `shutil.copytree` raises `FileExistsError` on a
+target that already exists. PIDs recycle, and a reused Lambda container keeps the same one, so a
+crash mid-copy would have produced the same error on every subsequent invocation rather than
+clearing itself. The staging directory is now removed first.
+
 ## Trade-off
 
 Baking the index means the image is only as fresh as its last build, and `docker build` needs the
@@ -63,10 +75,27 @@ PDFs present — `data/` is gitignored, so a clean checkout must run `scripts/fe
 That is the price of having no database. For a corpus that changes a few times a year it is the
 right trade; for one that changes hourly it would not be.
 
+## Known gap
+
+CI does not build this image. Doing so means downloading torch and spending nine minutes embedding
+on every run, which is a poor trade for a Dockerfile that changes rarely — but it does mean a broken
+Dockerfile reaches `main`. The image is built and exercised by hand before each deploy instead, and
+if that stops being enough the honest fix is a scheduled build rather than one on every push.
+
 ## Measured validation
 
-30 tests pass. ruff clean. Image 2.4 GB, container healthy 22 s after start, retriever ready in 5 s,
+31 tests pass. ruff clean. Image 2.4 GB, container healthy 22 s after start, retriever ready in 5 s,
 embedded query 20 ms.
+
+Verified in the built image, via `docker exec` so that no entrypoint or `CMD` is involved:
+
+```
+health: {"status":"ok"}
+user: app
+index_path() -> /tmp/index
+  0.863  moosavi2016_lea.pdf p.2
+  0.848  pradhan2014_scoring.pdf p.1
+```
 
 ## Next
 
