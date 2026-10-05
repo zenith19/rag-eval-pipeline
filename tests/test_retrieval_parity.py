@@ -44,8 +44,11 @@ def test_answer_sources_match_the_retriever(retriever, monkeypatch):
     from rag.generate import answer_question
 
     monkeypatch.setattr("rag.generate.generate_from_chunks", lambda q, chunks: "stub answer")
-    _answer, sources = answer_question(QUERY, K)
-    assert sources == retriever.retrieve(QUERY, K)
+    _answer, chunks = answer_question(QUERY, K)
+    assert [c.chunk_id for c in chunks] == retriever.retrieve(QUERY, K)
+    # The chunks carry what a citation needs, so the API never has to go back to
+    # the store for provenance retrieval already had.
+    assert all(c.cite() for c in chunks)
 
 
 @pytest.mark.integration

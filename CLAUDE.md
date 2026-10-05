@@ -10,7 +10,13 @@ Decisions live in `docs/decisions/`.
 ## Environment
 
 - **Use `.venv`.** `myenv/` is a stale, half-built environment left over from a directory move;
-  its scripts point at a path that no longer exists and it is missing most dependencies.
+  it is missing most dependencies.
+- **Always invoke tools as `.venv/bin/python -m <tool>`, never `.venv/bin/<tool>`.** This project
+  lives under a path containing spaces ("Full Time Job"), and a shebang line cannot express an
+  interpreter path with a space in it — the kernel splits at the first one and looks for
+  `/home/zenith/Full`. Every console script in the venv (`uvicorn`, `pytest`, `ruff`, `pip`, `aws`)
+  is therefore unusable; the `-m` form has no shebang and always works. Moving the project to a
+  path without spaces would also fix it.
 - Qdrant runs in Docker: `docker compose up -d` (REST on :6333).
 - Generation uses Amazon Bedrock (`eu-central-1`) and needs AWS credentials.
 
@@ -39,7 +45,7 @@ docker compose up -d                        # Qdrant
 .venv/bin/python -m evaluation.run_eval           # score retrieval
 .venv/bin/python -m pytest tests/ -q        # full suite (integration tests skip without Qdrant)
 .venv/bin/python -m pytest tests/ -q -m "not integration"   # fast subset
-.venv/bin/uvicorn api.main:app --reload     # API
+.venv/bin/python -m uvicorn api.main:app --reload   # API (see "module form" below)
 .venv/bin/python scripts/fetch_corpus.py --dry-run          # corpus, without downloading
 git config core.hooksPath .githooks          # enable the shared pre-commit hook (once per clone)
 .venv/bin/pip install -e ".[dev]"           # install the package plus pytest + ruff

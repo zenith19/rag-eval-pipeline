@@ -60,18 +60,25 @@ def generate_from_chunks(question: str, chunks: list[Chunk]) -> str:
     return response["output"]["message"]["content"][0]["text"]
 
 
-def answer_question(question: str, k: int = 3) -> tuple[str, list[str]]:
+def answer_question(question: str, k: int = 3) -> tuple[str, list[Chunk]]:
+    """Return the answer and the chunks it was grounded in.
+
+    The chunks rather than their IDs, so callers can cite a page without going
+    back to the store for something retrieval already had in hand.
+    """
     chunks = retrieve_chunks(question, k)
     answer = generate_from_chunks(question, chunks)
-    return answer, [c.chunk_id for c in chunks]
+    return answer, chunks
 
 
 def main() -> None:
     question = "What is the BenCoref dataset?"
-    answer, sources = answer_question(question)
+    answer, chunks = answer_question(question)
     print(f"Q: {question}\n")
     print(answer)
-    print(f"\nRetrieved chunks: {sources}")
+    print("\nSources:")
+    for c in chunks:
+        print(f"  {c.cite()}")
 
 
 if __name__ == "__main__":

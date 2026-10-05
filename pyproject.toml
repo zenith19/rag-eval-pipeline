@@ -16,6 +16,7 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "mcp[cli]",
+    "mangum",
 ]
 
 [project.optional-dependencies]
