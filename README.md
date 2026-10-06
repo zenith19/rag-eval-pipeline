@@ -144,6 +144,13 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+> If your checkout path contains spaces, invoke tools as `python -m uvicorn`, `python -m pytest`
+> and so on. A shebang cannot express an interpreter path with a space in it, so the venv's
+> console scripts will not run — the `-m` form is unaffected.
+
+```bash
+```
+
 Start the Qdrant vector database (runs as a container; data persists in a named volume):
 
 ```bash
@@ -180,7 +187,7 @@ python -m rag.build_index
 python -m evaluation.run_eval
 
 # 4. Serve the API (interactive docs at http://127.0.0.1:8000/docs)
-uvicorn api.main:app --reload
+python -m uvicorn api.main:app --reload
 ```
 
 Ask a question through the API:

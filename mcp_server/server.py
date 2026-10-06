@@ -53,10 +53,16 @@ def ask_question(question: str, k: int = 3) -> dict:
         k: Number of chunks to retrieve as context (default 3).
 
     Returns:
-        {answer, sources} where sources are the chunk IDs the answer drew on.
+        {answer, sources} where each source carries its chunk ID and a citation.
     """
-    answer, sources = answer_question(question, k)
-    return {"answer": answer, "sources": sources}
+    answer, chunks = answer_question(question, k)
+    return {
+        "answer": answer,
+        "sources": [
+            {"chunk_id": c.chunk_id, "citation": c.cite(), "section": c.section}
+            for c in chunks
+        ],
+    }
 
 
 @mcp.tool()

@@ -224,3 +224,13 @@ myenv/
 
 # Private planning notes (interview/resume prep)
 ROADMAP.md
+
+# Terraform
+infra/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+# tfvars hold account-specific values (and sometimes secrets)
+*.auto.tfvars
+terraform.tfvars
