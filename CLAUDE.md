@@ -20,6 +20,50 @@ Decisions live in `docs/decisions/`.
 - Qdrant runs in Docker: `docker compose up -d` (REST on :6333).
 - Generation uses Amazon Bedrock (`eu-central-1`) and needs AWS credentials.
 
+## Credentials
+
+**No secrets live in this repo, and none should ever be added.**
+
+- Credentials come from `~/.aws/credentials` (profile `default`); `~/.aws/config` sets
+  `region = eu-central-1`. boto3 finds them automatically.
+- The IAM user is `bedrock-dev`, carrying `AmazonBedrockFullAccess` and `AmazonS3ReadOnlyAccess`.
+  **It cannot deploy** — ECR, Lambda, IAM roles, log groups and Budgets are all outside those two
+  policies, so `terraform apply` needs a different identity (see `docs/decisions/007`).
+- Model ID is `eu.amazon.nova-lite-v1:0`. The `eu.` inference-profile prefix is required in this
+  region; without it Bedrock reports "on-demand throughput isn't supported".
+- `RAG_S3_BUCKET` (e.g. `zenith-rag-docs-2026`) switches ingestion to S3; unset, it reads `data/`.
+  Note the bucket holds the original 9 papers, not the 48-paper corpus.
+
+Rules: never hardcode or print keys, account IDs or `~/.aws/*`. Never change the region or model ID
+to work around an error — diagnose it. If credentials are invalid, stop and say so rather than
+inventing a workaround.
+
+### Verifying credentials
+
+```bash
+# identity — expect an ARN ending in user/bedrock-dev
+.venv/bin/python -c "import boto3; print(boto3.client('sts').get_caller_identity()['Arn'])"
+# stale env vars silently override the credentials file — expect no output
+env | grep -E '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN)=' | cut -d= -f1
+# a real Bedrock call — expect a grounded answer
+.venv/bin/python -m rag.generate
+```
+
+Environment variables do not persist between commands here: each runs in its own process. Pass them
+inline, or set them in `.claude/settings.local.json` (personal, gitignored).
+
+### Troubleshooting
+
+| Error | Cause | Fix |
+|---|---|---|
+| `UnrecognizedClientException`, `InvalidClientTokenId`, `SignatureDoesNotMatch` | key deleted, rotated or mistyped | new access key in the IAM console; update `~/.aws/credentials` |
+| `ExpiredTokenException` | stale `AWS_SESSION_TOKEN` overriding the file | `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN` |
+| `AccessDeniedException` on Bedrock | model not enabled for the account | enable Nova Lite in the Bedrock console, `eu-central-1` |
+| `ValidationException` … "on-demand throughput isn't supported" | model ID missing the `eu.` prefix | use `eu.amazon.nova-lite-v1:0` |
+| `NoCredentialsError` | file missing, or running inside a container that cannot see it | run on the host |
+| `Connection refused` on 6333 | Qdrant not running | `docker compose up -d` |
+| `Collection 'documents' doesn't exist` | fresh Qdrant volume | `.venv/bin/python -m rag.build_index` |
+
 ## Invariants — breaking these corrupts data silently
 
 1. **One retrieval path.** Every consumer — eval harness, API, agent, MCP tools, label helper —
