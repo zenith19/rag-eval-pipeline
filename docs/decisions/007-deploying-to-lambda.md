@@ -58,6 +58,17 @@ interpreter path containing a space**. The kernel splits at the first one and lo
 is unusable and always was; `python -m <tool>` has no shebang and is unaffected. The README and
 CLAUDE.md told people to run `uvicorn api.main:app`, which could never have worked.
 
+## A third blocker, from the project's own history
+
+An earlier `CLAUDE.md` records that the IAM user is `bedrock-dev`, carrying exactly
+`AmazonBedrockFullAccess` and `AmazonS3ReadOnlyAccess`. Neither covers ECR, Lambda, IAM role
+creation, CloudWatch log groups or Budgets — so even with working keys, `terraform apply` would
+fail partway and leave a half-created stack.
+
+Deploying needs a second identity. The cleanest split is a dedicated `deploy` user used only by
+Terraform, leaving `bedrock-dev` as the minimal runtime identity it already is — which is also the
+shape the Lambda execution role takes: `bedrock:InvokeModel` on one model and nothing else.
+
 ## Measured validation
 
 ```
