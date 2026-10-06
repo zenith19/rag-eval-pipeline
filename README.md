@@ -274,10 +274,10 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. They are worth more than the code in places, because several
-document mistakes rather than successes:
+trade-off → measured validation. Seven so far; these four are picked because they document
+mistakes rather than successes:
 
-| | |
+| Record | What it documents |
 |---|---|
 | [001](docs/decisions/001-unified-retrieval-path.md) | Five places were issuing Qdrant queries, including the tool that picked the gold labels |
 | [002](docs/decisions/002-corpus-from-the-bibliography.md) | Three resolver bugs that would have corrupted the corpus silently |
