@@ -38,7 +38,7 @@ def normalise(name: str) -> str:
 
 
 def md5(path: Path) -> str:
-    h = hashlib.md5()  # matching S3's ETag, not a security claim
+    h = hashlib.md5(usedforsecurity=False)  # matching S3's ETag, not a security claim
     with path.open("rb") as fh:
         for block in iter(lambda: fh.read(1 << 20), b""):
             h.update(block)
@@ -63,9 +63,17 @@ def main() -> int:
     args = ap.parse_args()
 
     import boto3
+    from boto3.s3.transfer import TransferConfig
     from botocore.exceptions import ClientError
 
     s3 = boto3.client("s3", region_name=REGION)
+
+    # Upload in one part regardless of size. A multipart upload's ETag is a hash of
+    # part hashes, not the file's MD5, so the skip check below could never match it
+    # and every run would re-upload that file forever. Today's largest paper is 4 MB,
+    # under boto3's 8 MB default — but the corpus is meant to grow, and a 5 GB ceiling
+    # on a PDF is not a constraint worth worrying about.
+    transfer = TransferConfig(multipart_threshold=5 * 1024**3)
 
     local = sorted(ROOT.joinpath("data").glob("*.pdf"))
     if not local:
@@ -116,7 +124,13 @@ def main() -> int:
             continue
 
         try:
-            s3.upload_file(str(path), args.bucket, key, ExtraArgs={"ContentType": "application/pdf"})
+            s3.upload_file(
+                str(path),
+                args.bucket,
+                key,
+                ExtraArgs={"ContentType": "application/pdf"},
+                Config=transfer,
+            )
             print(f" {tag} uploaded      {shown}")
             uploaded += 1
         except ClientError as e:
@@ -133,7 +147,7 @@ def main() -> int:
     if orphans:
         print(f"\n{len(orphans)} remote object(s) with no local file (left alone):")
         for k in orphans:
-            print(f"    {re.sub(r'[ ]+', ' ', k)[:70]}")
+            print(f"    {re.sub(r'\s+', ' ', k)[:70]}")
     return 1 if failed else 0
 
 
