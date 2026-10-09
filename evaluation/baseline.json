@@ -5,25 +5,32 @@
     "chunks": 1688
   },
   "eval_set": {
-    "path": "eval/eval_set.jsonl",
-    "questions": 10
+    "path": "evaluation/eval_set.jsonl",
+    "questions": 42
   },
   "metrics": {
-    "mrr": 0.77,
+    "mrr": 0.578,
+    "mrr_k": 10,
     "recall_at_k": {
-      "1": 0.35,
-      "3": 0.55,
-      "5": 0.7,
-      "10": 0.75
+      "1": 0.393,
+      "3": 0.583,
+      "5": 0.667,
+      "10": 0.774,
+      "20": 0.869,
+      "50": 0.917,
+      "100": 0.94
     },
     "hit_rate_at_k": {
-      "1": 0.7,
-      "3": 0.8,
-      "5": 0.9,
-      "10": 0.9
+      "1": 0.476,
+      "3": 0.643,
+      "5": 0.714,
+      "10": 0.81,
+      "20": 0.881,
+      "50": 0.929,
+      "100": 0.952
     }
   },
   "tolerance": 0.03,
-  "recorded": "2026-10-03",
-  "note": "Post-expansion baseline over the full 48-paper literature review. recall@1 held at 0.35 but depth collapsed (recall@10 0.95 -> 0.75); reaching the old k=10 coverage now needs k=50. See docs/decisions/004. Only 10 questions, so treat as directional: R2 freezes a ~40-question set before any comparison."
+  "recorded": "2026-10-07",
+  "note": "First baseline on the frozen 42-question set (10 original + 32 hand-verified, chunk-first; 50 gold chunks over 37 of the 48 papers). Supersedes the 10-question directional baseline. MRR is truncated at max(k_values), so it is MRR@10 here and rises to 0.584 when k=100 is scored - always quote it with its depth. Headline finding: recall@1 0.393 vs recall@20 0.869 means most gold material IS retrieved but ranked badly, so reranking is the main lever; but recall@100 0.940 leaves ~6% of gold chunks unreachable at any practical depth, which is a genuine coverage gap and revives the case for hybrid retrieval. The reranking-vs-coverage argument that follows from these numbers is recorded in docs/decisions/008."
 }
