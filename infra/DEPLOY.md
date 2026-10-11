@@ -83,8 +83,8 @@ AWS_PROFILE=rag-deploy terraform -chdir=infra destroy
 ```
 
 ECR holds images Terraform did not create, so `destroy` can fail on a non-empty repository. Delete
-the images first (`aws ecr batch-delete-image`) or accept the repository lingering at roughly
-€0.24/month per 2.4 GB image.
+the images first (`.venv/bin/python -m awscli ecr batch-delete-image`) or accept the repository
+lingering at roughly €0.24/month per 2.4 GB image.
 
 ## Notes
 
