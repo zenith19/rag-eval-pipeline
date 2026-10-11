@@ -30,7 +30,10 @@
         "ecr:BatchGetImage",
         "ecr:BatchDeleteImage",
         "ecr:DescribeImages",
-        "ecr:GetDownloadUrlForLayer"
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:SetRepositoryPolicy",
+        "ecr:GetRepositoryPolicy",
+        "ecr:DeleteRepositoryPolicy"
       ],
       "Resource": "arn:aws:ecr:eu-central-1:*:repository/rag-eval-pipeline"
     },
@@ -78,7 +81,9 @@
         "lambda:RemovePermission",
         "lambda:TagResource",
         "lambda:UntagResource",
-        "lambda:ListTags"
+        "lambda:ListTags",
+        "lambda:InvokeFunction",
+        "lambda:InvokeFunctionUrl"
       ],
       "Resource": "arn:aws:lambda:eu-central-1:*:function:rag-eval-pipeline"
     },
@@ -117,7 +122,10 @@
       "Effect": "Allow",
       "Action": [
         "budgets:ViewBudget",
-        "budgets:ModifyBudget"
+        "budgets:ModifyBudget",
+        "budgets:ListTagsForResource",
+        "budgets:TagResource",
+        "budgets:UntagResource"
       ],
       "Resource": "arn:aws:budgets::*:budget/rag-eval-pipeline-monthly"
     },
