@@ -18,6 +18,15 @@ with `AccessDenied` on the renamed resource. Account segments are wildcarded (`a
 because no account ID belongs in this repo; the policy is attached inside a single account, so the
 wildcard does not widen it.
 
+Two actions in it are not scoped, because AWS does not let them be. `ecr:GetAuthorizationToken`
+authenticates to the registry rather than touching a repository, and `logs:DescribeLogGroups`
+enumerates groups rather than reading one — scoping either to a resource ARN grants nothing at all,
+silently, and the console reports it only as "actions that do not provide permissions". Both are
+read-only and neither exposes log contents: reading actual events stays scoped to this project's
+log group under `ReadLogsToDebugDeploys`. When adding an action here, check whether it supports
+resource-level permissions before scoping it, or `terraform apply` fails on a grant that looks
+correct in the file.
+
 ## One-time setup
 
 1. **Create the user.** IAM → Users → Create user → `rag-deploy`. No console access needed.
