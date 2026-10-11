@@ -109,7 +109,13 @@ resource "aws_iam_role_policy" "bedrock" {
       Effect = "Allow"
       Action = ["bedrock:InvokeModel"]
       Resource = [
-        "arn:aws:bedrock:${var.region}::foundation-model/${var.bedrock_foundation_model}",
+        # The "eu." prefix makes this a CROSS-REGION inference profile: Bedrock may
+        # serve the request from any EU region, and authorises against the foundation
+        # model in whichever one it picks. Pinning this to var.region passes locally
+        # under AmazonBedrockFullAccess and then fails on the scoped role as soon as
+        # the profile routes elsewhere. The profile itself stays pinned, so this does
+        # not widen which model can be called — only where it may be served from.
+        "arn:aws:bedrock:*::foundation-model/${var.bedrock_foundation_model}",
         "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}",
       ]
     }]
@@ -140,12 +146,16 @@ resource "aws_lambda_function" "app" {
     command     = ["api.lambda_handler.handler"]
   }
 
-  memory_size = 2048
+  # Peak usage is 718 MB, so this is not about RAM. Lambda scales CPU with memory and
+  # the cold start is CPU-bound — importing torch and loading the embedding model —
+  # so memory buys cores. Measured on this function, /health cold:
+  #   2048 MB -> 62.1s     3008 MB -> 18.7s     (warm, either way: ~0.14s)
+  # 3008 is the ceiling this account allows; the usual Lambda maximum is 10240.
+  memory_size = 3008
 
-  # Cold start loads sentence-transformers and copies the baked index to /tmp. 60s
-  # was a guess made before anything had ever run; raise it until a real cold start
-  # is measured, then lower it to something justified by the number.
-  timeout = 120
+  # A cold start is 18.7s measured, and a cold request also waits on Bedrock. 90s
+  # leaves room for both without the 60s that actually timed out at 2048 MB.
+  timeout = 90
 
   # The ceiling on a surprise bill. A public endpoint with unbounded concurrency is
   # an invitation. On an account whose total limit is 10 this must be -1 (see
