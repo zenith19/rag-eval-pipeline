@@ -112,9 +112,7 @@
       "Effect": "Allow",
       "Action": [
         "budgets:ViewBudget",
-        "budgets:CreateBudget",
-        "budgets:ModifyBudget",
-        "budgets:DeleteBudget"
+        "budgets:ModifyBudget"
       ],
       "Resource": "arn:aws:budgets::*:budget/rag-eval-pipeline-monthly"
     },
