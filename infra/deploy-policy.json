@@ -189,6 +189,22 @@
       ]
     },
     {
+      "Sid": "KeepWarmSchedule",
+      "Effect": "Allow",
+      "Action": [
+        "events:PutRule",
+        "events:DescribeRule",
+        "events:DeleteRule",
+        "events:PutTargets",
+        "events:RemoveTargets",
+        "events:ListTargetsByRule",
+        "events:ListTagsForResource",
+        "events:TagResource",
+        "events:UntagResource"
+      ],
+      "Resource": "arn:aws:events:eu-central-1:*:rule/rag-eval-pipeline-warm"
+    },
+    {
       "Sid": "WhoAmI",
       "Effect": "Allow",
       "Action": "sts:GetCallerIdentity",

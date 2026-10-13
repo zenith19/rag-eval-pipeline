@@ -278,3 +278,60 @@ resource "aws_budgets_budget" "monthly" {
     subscriber_email_addresses = [var.alert_email]
   }
 }
+
+# ---------------------------------------------------------------- warm ------
+
+# A cold /ask takes ~47s: importing torch and loading the embedding model. HTTP API
+# integrations cap at 30s and AWS does not allow that to be raised, so the first
+# visitor after an idle period gets a 503 from the gateway before the function ever
+# answers. Warm requests are ~0.5s, so the fix is to not be cold.
+#
+# Five minutes is under Lambda's idle reclaim window without being chatty: ~8,600
+# invocations a month at roughly half a second each, which is cents. Provisioned
+# concurrency would solve it more thoroughly at about 120x the price, which is not a
+# trade a demo should make.
+#
+# This buys the FIRST container only. A second simultaneous visitor still gets a cold
+# one; the demo page retries on 503 for that case rather than pretending otherwise.
+resource "aws_cloudwatch_event_rule" "warm" {
+  name                = "${local.name}-warm"
+  description         = "Keep one container warm so the first /ask does not exceed the gateway's 30s cap"
+  schedule_expression = "rate(5 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "warm" {
+  rule  = aws_cloudwatch_event_rule.warm.name
+  arn   = aws_lambda_function.app.arn
+  input = jsonencode({ warm = true })
+
+  # EventBridge invokes through a role rather than a Lambda resource policy, for the
+  # same reason API Gateway does: resource policies are not enforced on this account.
+  role_arn = aws_iam_role.warm_invoke.arn
+}
+
+resource "aws_iam_role" "warm_invoke" {
+  name = "${local.name}-warm-invoke"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "events.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "warm_invoke" {
+  name = "${local.name}-invoke"
+  role = aws_iam_role.warm_invoke.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = [aws_lambda_function.app.arn]
+    }]
+  })
+}

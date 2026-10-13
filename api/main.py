@@ -154,11 +154,22 @@ f.onsubmit = async (e) => {
   go.disabled = true;
   out.textContent = 'Thinking\\u2026 (a cold start takes a few seconds)';
   try {
-    const r = await fetch('ask', {
+    // A schedule keeps one container warm, but a second simultaneous visitor gets
+    // a cold one, and a cold /ask loads the embedding model for ~47s against the
+    // gateway's 30s ceiling. That surfaces as 503/504 before the app can answer,
+    // so retry rather than show a raw gateway error: by the second attempt the
+    // container that timed out is warm and answers in well under a second.
+    const ask = () => fetch('ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: q.value, k: 4 })
     });
+    let r = await ask();
+    for (let attempt = 1; (r.status === 503 || r.status === 504) && attempt <= 2; attempt++) {
+      out.textContent = 'Waking the model up\\u2026 (first question after a quiet spell)';
+      await new Promise(res => setTimeout(res, 3000));
+      r = await ask();
+    }
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
       out.textContent = e.detail || ('Request failed: ' + r.status);
