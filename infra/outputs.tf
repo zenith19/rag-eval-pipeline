@@ -1,6 +1,6 @@
-output "function_url" {
+output "demo_url" {
   description = "The public demo endpoint"
-  value       = aws_lambda_function_url.app.function_url
+  value       = aws_apigatewayv2_stage.default.invoke_url
 }
 
 output "ecr_repository_url" {

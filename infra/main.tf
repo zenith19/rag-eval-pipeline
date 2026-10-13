@@ -180,28 +180,85 @@ resource "aws_lambda_function" "app" {
   ]
 }
 
-# authorization_type = "NONE" only says the URL does not check IAM; it does not grant
-# anyone the right to call it. Without this the URL answers every request with 403.
-# The FunctionUrlAuthType condition keeps the grant to the URL: it does not let the
-# world call the function through the Lambda API.
-resource "aws_lambda_permission" "public_url" {
-  statement_id           = "AllowPublicFunctionUrlInvoke"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.app.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
+# The public face is API Gateway, and it invokes Lambda with an integration ROLE
+# rather than a resource policy. That is not a style choice: on this account Lambda
+# resource-based policies are not enforced at all. Measured on this function URL —
+# a SigV4-signed request from a principal granted only via lambda:AddPermission
+# returns 403, while the same request from a principal holding an identity-based
+# grant returns 200; anonymous access with a Principal "*" grant returns 403, and so
+# did CloudFront OAC, which depends on a resource-policy grant to its service
+# principal. The account is in no Organization, so no SCP or RCP explains it.
+#
+# credentials_arn makes API Gateway assume this role and call Lambda with its
+# credentials, so authorisation runs through an identity policy, which does work.
+# There is no aws_lambda_permission anywhere below, and that absence is the point.
+#
+# No function URL either: API Gateway integrates with the function ARN directly.
+
+resource "aws_iam_role" "apigw_invoke" {
+  name = "${local.name}-apigw-invoke"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "apigateway.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
 }
 
-resource "aws_lambda_function_url" "app" {
-  function_name      = aws_lambda_function.app.function_name
-  authorization_type = "NONE" # public on purpose: a link nobody can open proves nothing
+resource "aws_iam_role_policy" "apigw_invoke" {
+  name = "${local.name}-invoke"
+  role = aws_iam_role.apigw_invoke.id
 
-  cors {
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = [aws_lambda_function.app.arn]
+    }]
+  })
+}
+
+resource "aws_apigatewayv2_api" "app" {
+  name          = local.name
+  protocol_type = "HTTP"
+
+  cors_configuration {
     allow_origins = ["*"]
     allow_methods = ["GET", "POST"]
+    allow_headers = ["content-type"]
   }
 }
 
+resource "aws_apigatewayv2_integration" "app" {
+  api_id                 = aws_apigatewayv2_api.app.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.app.arn
+  payload_format_version = "2.0"
+  credentials_arn        = aws_iam_role.apigw_invoke.arn
+
+  # A cold start is 18.7s and a cold /ask also waits on Bedrock. The default is 30s,
+  # and 30000 is the documented ceiling for HTTP APIs, so this is the most the
+  # gateway will wait — which is why the Lambda timeout of 90s cannot be used in full.
+  timeout_milliseconds = 30000
+}
+
+# $default catches every path, so FastAPI keeps doing the routing rather than having
+# routes declared twice, in Python and in Terraform, free to disagree.
+resource "aws_apigatewayv2_route" "default" {
+  api_id    = aws_apigatewayv2_api.app.id
+  route_key = "$default"
+  target    = "integrations/${aws_apigatewayv2_integration.app.id}"
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.app.id
+  name        = "$default"
+  auto_deploy = true
+}
 # ---------------------------------------------------------------- cost ------
 
 # Lambda is free at idle, but "free" assumes nobody hammers a public endpoint.
