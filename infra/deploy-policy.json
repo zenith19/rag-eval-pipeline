@@ -30,7 +30,10 @@
         "ecr:BatchGetImage",
         "ecr:BatchDeleteImage",
         "ecr:DescribeImages",
-        "ecr:GetDownloadUrlForLayer"
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:SetRepositoryPolicy",
+        "ecr:GetRepositoryPolicy",
+        "ecr:DeleteRepositoryPolicy"
       ],
       "Resource": "arn:aws:ecr:eu-central-1:*:repository/rag-eval-pipeline"
     },
@@ -78,7 +81,9 @@
         "lambda:RemovePermission",
         "lambda:TagResource",
         "lambda:UntagResource",
-        "lambda:ListTags"
+        "lambda:ListTags",
+        "lambda:InvokeFunction",
+        "lambda:InvokeFunctionUrl"
       ],
       "Resource": "arn:aws:lambda:eu-central-1:*:function:rag-eval-pipeline"
     },
@@ -88,7 +93,6 @@
       "Action": [
         "logs:CreateLogGroup",
         "logs:DeleteLogGroup",
-        "logs:DescribeLogGroups",
         "logs:PutRetentionPolicy",
         "logs:DeleteRetentionPolicy",
         "logs:TagResource",
@@ -96,6 +100,12 @@
         "logs:ListTagsForResource"
       ],
       "Resource": "arn:aws:logs:eu-central-1:*:log-group:/aws/lambda/rag-eval-pipeline*"
+    },
+    {
+      "Sid": "DescribeLogGroupsTakesNoResource",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*"
     },
     {
       "Sid": "ReadLogsToDebugDeploys",
@@ -112,7 +122,10 @@
       "Effect": "Allow",
       "Action": [
         "budgets:ViewBudget",
-        "budgets:ModifyBudget"
+        "budgets:ModifyBudget",
+        "budgets:ListTagsForResource",
+        "budgets:TagResource",
+        "budgets:UntagResource"
       ],
       "Resource": "arn:aws:budgets::*:budget/rag-eval-pipeline-monthly"
     },

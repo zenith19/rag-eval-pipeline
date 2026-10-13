@@ -23,9 +23,16 @@ variable "bedrock_foundation_model" {
 }
 
 variable "max_concurrency" {
-  description = "Reserved concurrent executions. The hard ceiling on simultaneous Bedrock calls."
+  description = "Reserved concurrent executions, or -1 for no reservation. The hard ceiling on simultaneous Bedrock calls."
   type        = number
-  default     = 2
+
+  # -1, not 2, because reserving concurrency requires the account to keep at least
+  # 10 executions unreserved. A new account's total limit IS 10, so any reservation
+  # at all is rejected: "decreases account's UnreservedConcurrentExecution below its
+  # minimum value of [10]". The account limit then serves as the ceiling instead,
+  # which is the same order of magnitude as the cap this was meant to impose.
+  # Set this to a real number once the account limit is raised above 10.
+  default = -1
 }
 
 variable "rate_limit_per_min" {

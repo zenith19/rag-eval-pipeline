@@ -51,6 +51,33 @@ resource "aws_ecr_lifecycle_policy" "keep_recent" {
   })
 }
 
+# Lambda pulls the image as a service, not as the caller, so the execution role
+# cannot grant this — it needs a resource policy on the repository itself.
+# Without it CreateFunction fails with "Lambda does not have permission to access
+# the ECR image", which names ECR without saying that a repository policy is what
+# is missing. Scoped by sourceArn so only this function may pull.
+resource "aws_ecr_repository_policy" "lambda_pull" {
+  repository = aws_ecr_repository.app.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "LambdaECRImageRetrievalPolicy"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action = [
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+      ]
+      Condition = {
+        StringLike = {
+          "aws:sourceArn" = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:${local.name}"
+        }
+      }
+    }]
+  })
+}
+
 # ----------------------------------------------------------------- IAM ------
 
 resource "aws_iam_role" "lambda" {
@@ -82,7 +109,13 @@ resource "aws_iam_role_policy" "bedrock" {
       Effect = "Allow"
       Action = ["bedrock:InvokeModel"]
       Resource = [
-        "arn:aws:bedrock:${var.region}::foundation-model/${var.bedrock_foundation_model}",
+        # The "eu." prefix makes this a CROSS-REGION inference profile: Bedrock may
+        # serve the request from any EU region, and authorises against the foundation
+        # model in whichever one it picks. Pinning this to var.region passes locally
+        # under AmazonBedrockFullAccess and then fails on the scoped role as soon as
+        # the profile routes elsewhere. The profile itself stays pinned, so this does
+        # not widen which model can be called — only where it may be served from.
+        "arn:aws:bedrock:*::foundation-model/${var.bedrock_foundation_model}",
         "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}",
       ]
     }]
@@ -104,11 +137,30 @@ resource "aws_lambda_function" "app" {
 
   # The embedding model loads on cold start and the index is copied to /tmp.
   # 2 GB buys proportionally more CPU, which is what actually shortens that.
-  memory_size = 2048
-  timeout     = 60
+  # The image's own CMD runs uvicorn, which is right for `docker run` and wrong for
+  # Lambda: the runtime polls a client for events rather than speaking HTTP to the
+  # container. Overriding the entry point here keeps one image serving both, instead
+  # of maintaining a second Dockerfile that drifts from the first.
+  image_config {
+    entry_point = ["/usr/local/bin/python", "-m", "awslambdaric"]
+    command     = ["api.lambda_handler.handler"]
+  }
 
-  # The ceiling on a surprise bill. A public endpoint with unbounded concurrency
-  # is an invitation; two at a time is plenty for a demo and caps the blast radius.
+  # Peak usage is 718 MB, so this is not about RAM. Lambda scales CPU with memory and
+  # the cold start is CPU-bound — importing torch and loading the embedding model —
+  # so memory buys cores. Measured on this function, /health cold:
+  #   2048 MB -> 62.1s     3008 MB -> 18.7s     (warm, either way: ~0.14s)
+  # 3008 is the ceiling this account allows; the usual Lambda maximum is 10240.
+  memory_size = 3008
+
+  # A cold start is 18.7s measured, and a cold request also waits on Bedrock. 90s
+  # leaves room for both without the 60s that actually timed out at 2048 MB.
+  timeout = 90
+
+  # The ceiling on a surprise bill. A public endpoint with unbounded concurrency is
+  # an invitation. On an account whose total limit is 10 this must be -1 (see
+  # variables.tf) and the account limit is the ceiling; the per-IP rate limit in the
+  # application and the budget alarm are the other two layers.
   reserved_concurrent_executions = var.max_concurrency
 
   environment {
@@ -120,7 +172,24 @@ resource "aws_lambda_function" "app" {
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda]
+  # The repository policy must exist before CreateFunction, which verifies the
+  # image is pullable at create time rather than on first invoke.
+  depends_on = [
+    aws_cloudwatch_log_group.lambda,
+    aws_ecr_repository_policy.lambda_pull,
+  ]
+}
+
+# authorization_type = "NONE" only says the URL does not check IAM; it does not grant
+# anyone the right to call it. Without this the URL answers every request with 403.
+# The FunctionUrlAuthType condition keeps the grant to the URL: it does not let the
+# world call the function through the Lambda API.
+resource "aws_lambda_permission" "public_url" {
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.app.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
 }
 
 resource "aws_lambda_function_url" "app" {

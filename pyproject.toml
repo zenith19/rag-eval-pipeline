@@ -15,6 +15,10 @@ dependencies = [
     "boto3",
     "fastapi",
     "uvicorn",
+    # The Lambda runtime talks to a client that polls for events, not to an HTTP
+    # server. Without this the container starts uvicorn, Lambda waits for a runtime
+    # that never registers, and every invoke times out. See infra/main.tf image_config.
+    "awslambdaric",
     "mcp[cli]",
     "mangum",
 ]
