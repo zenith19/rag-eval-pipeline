@@ -20,8 +20,10 @@ Eval set format (JSONL, one object per line, hand-labeled):
 from __future__ import annotations
 
 import json
+import math
+import random
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -120,6 +122,105 @@ def reciprocal_rank(retrieved: Sequence[str], relevant: frozenset[str]) -> float
     return 0.0
 
 
+def ndcg_at_k(retrieved: Sequence[str], relevant: frozenset[str], k: int) -> float:
+    """Normalised discounted cumulative gain at k, with binary relevance.
+
+    Fills a gap the other three leave. MRR sees only the FIRST hit, so moving a
+    second gold chunk from rank 9 to rank 2 does not change it. recall@k sees only
+    membership, so that same move does not change it either. nDCG is the one that
+    rewards it, which is exactly the improvement a reranker is supposed to produce
+    — without it a reranker could do real work and score flat on every metric here.
+
+    Binary gains, so DCG = sum over hits of 1/log2(rank+1), and the ideal ordering
+    puts min(len(relevant), k) hits in the top positions. Graded relevance would
+    need a judgement of *how* relevant each chunk is; these labels do not carry one,
+    and inventing grades to feed a formula would be worse than binary.
+    """
+    if not relevant:
+        return 0.0
+    dcg = sum(
+        1.0 / math.log2(rank + 1)
+        for rank, chunk_id in enumerate(retrieved[:k], start=1)
+        if chunk_id in relevant
+    )
+    ideal_hits = min(len(relevant), k)
+    idcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
+    return dcg / idcg if idcg else 0.0
+
+
+def bootstrap_mean_ci(
+    values: Sequence[float],
+    confidence: float = 0.95,
+    iterations: int = 10_000,
+    seed: int = 20261007,
+) -> tuple[float, float]:
+    """Percentile bootstrap confidence interval for the mean of per-query scores.
+
+    Resamples QUERIES with replacement, which is the thing that varies: the eval
+    set is one sample of the questions that could have been asked, and a different
+    42 would give different numbers. The interval says how much of a reported
+    difference is the retriever and how much is which questions got picked.
+
+    Resampling scores rather than re-running retrieval is deliberate and not merely
+    faster — retrieval is deterministic here, so re-running it 10,000 times would
+    produce the identical ranked list every time and measure nothing.
+
+    Seeded by default: a confidence interval that moves when you re-run it is not
+    reproducible, and this project's README may only quote numbers its own commands
+    reproduce.
+    """
+    n = len(values)
+    if n == 0:
+        return (0.0, 0.0)
+    if n == 1:
+        return (float(values[0]), float(values[0]))
+
+    rng = random.Random(seed)
+    means = []
+    for _ in range(iterations):
+        total = 0.0
+        for _ in range(n):
+            total += values[rng.randrange(n)]
+        means.append(total / n)
+    means.sort()
+
+    tail = (1.0 - confidence) / 2.0
+    lo = means[int(tail * iterations)]
+    hi = means[min(int((1.0 - tail) * iterations), iterations - 1)]
+    return (lo, hi)
+
+
+def bootstrap_delta_ci(
+    baseline: Sequence[float],
+    candidate: Sequence[float],
+    confidence: float = 0.95,
+    iterations: int = 10_000,
+    seed: int = 20261007,
+) -> tuple[float, float]:
+    """Interval for the mean per-query DIFFERENCE, candidate minus baseline.
+
+    This, not two separate intervals, is how two retrievers get compared here.
+    On this eval set recall@1 carries a 95% interval roughly ±0.13 wide, so any
+    two systems' intervals will overlap heavily and overlap is routinely misread
+    as "no difference". It is not: the intervals are wide because the QUESTIONS
+    vary in difficulty, and both systems answer the same questions.
+
+    Resampling the per-query differences cancels that shared difficulty. A
+    reranker that improves 9 questions and harms 2 shows a positive interval well
+    away from zero even while both absolute intervals straddle each other.
+
+    The interval excluding zero is the claim worth making: "better on this set"
+    rather than "a bigger number on this set".
+    """
+    if len(baseline) != len(candidate):
+        raise ValueError(
+            f"paired comparison needs the same queries in the same order: "
+            f"{len(baseline)} vs {len(candidate)}"
+        )
+    deltas = [c - b for b, c in zip(baseline, candidate, strict=True)]
+    return bootstrap_mean_ci(deltas, confidence=confidence, iterations=iterations, seed=seed)
+
+
 # --------------------------------------------------------------------------- #
 # Aggregation
 # --------------------------------------------------------------------------- #
@@ -131,19 +232,48 @@ class EvalReport:
     recall_at_k: dict[int, float]
     hit_rate_at_k: dict[int, float]
     mrr: float
+    ndcg_at_k: dict[int, float] = field(default_factory=dict)
 
-    def pretty(self) -> str:
+    # Per-query scores, keyed by metric name ("recall@5", "mrr", ...). Kept so an
+    # interval can be computed without re-running retrieval, and so a future
+    # comparison can pair queries between two systems rather than only compare
+    # their means. Not printed; this is the raw material under the aggregates.
+    per_query: dict[str, list[float]] = field(default_factory=dict)
+
+    def ci(self, metric: str, confidence: float = 0.95) -> tuple[float, float]:
+        """Bootstrap interval for one metric, e.g. ci("recall@5") or ci("mrr")."""
+        return bootstrap_mean_ci(self.per_query[metric], confidence=confidence)
+
+    def pretty(self, intervals: bool = False) -> str:
+        """Render the report. With intervals=True, append 95% bootstrap CIs.
+
+        Off by default because computing them costs ~10,000 resamples per metric,
+        and because an interval printed beside every number invites reading the
+        width as precision rather than as what it is: how much the figure depends
+        on which 42 questions were asked.
+        """
         lines = [
             f"Queries evaluated : {self.n_queries}",
             f"MRR               : {self.mrr:.3f}",
-            "",
-            f"{'k':>4} | {'recall@k':>9} | {'hit@k':>6}",
-            "-" * 26,
         ]
+        if intervals and "mrr" in self.per_query:
+            lo, hi = self.ci("mrr")
+            lines[-1] += f"   95% CI [{lo:.3f}, {hi:.3f}]"
+
+        header = f"{'k':>4} | {'recall@k':>9} | {'hit@k':>6} | {'nDCG@k':>7}"
+        if intervals:
+            header += f" | {'recall@k 95% CI':>18}"
+        lines += ["", header, "-" * len(header)]
+
         for k in self.k_values:
-            lines.append(
-                f"{k:>4} | {self.recall_at_k[k]:>9.3f} | {self.hit_rate_at_k[k]:>6.3f}"
+            row = (
+                f"{k:>4} | {self.recall_at_k[k]:>9.3f} | {self.hit_rate_at_k[k]:>6.3f} "
+                f"| {self.ndcg_at_k.get(k, float('nan')):>7.3f}"
             )
+            if intervals and f"recall@{k}" in self.per_query:
+                lo, hi = self.ci(f"recall@{k}")
+                row += f" | [{lo:>6.3f}, {hi:>6.3f}]"
+            lines.append(row)
         return "\n".join(lines)
 
 
@@ -160,24 +290,31 @@ def evaluate(
     from a RANKING problem (good recall@10 but low recall@1 / low MRR).
     """
     max_k = max(k_values)
-    recall_sums = {k: 0.0 for k in k_values}
-    hit_sums = {k: 0.0 for k in k_values}
-    rr_sum = 0.0
+    per_query: dict[str, list[float]] = {"mrr": []}
+    for k in k_values:
+        per_query[f"recall@{k}"] = []
+        per_query[f"hit@{k}"] = []
+        per_query[f"ndcg@{k}"] = []
 
     for ex in eval_set:
         retrieved = retriever.retrieve(ex.query, max_k)
         for k in k_values:
-            recall_sums[k] += recall_at_k(retrieved, ex.relevant_chunk_ids, k)
-            hit_sums[k] += hit_rate_at_k(retrieved, ex.relevant_chunk_ids, k)
-        rr_sum += reciprocal_rank(retrieved, ex.relevant_chunk_ids)
+            per_query[f"recall@{k}"].append(recall_at_k(retrieved, ex.relevant_chunk_ids, k))
+            per_query[f"hit@{k}"].append(hit_rate_at_k(retrieved, ex.relevant_chunk_ids, k))
+            per_query[f"ndcg@{k}"].append(ndcg_at_k(retrieved, ex.relevant_chunk_ids, k))
+        per_query["mrr"].append(reciprocal_rank(retrieved, ex.relevant_chunk_ids))
 
     n = len(eval_set)
+    mean = lambda vs: sum(vs) / n  # noqa: E731 — n, not len(vs); they are equal here
+
     return EvalReport(
         n_queries=n,
         k_values=k_values,
-        recall_at_k={k: recall_sums[k] / n for k in k_values},
-        hit_rate_at_k={k: hit_sums[k] / n for k in k_values},
-        mrr=rr_sum / n,
+        recall_at_k={k: mean(per_query[f"recall@{k}"]) for k in k_values},
+        hit_rate_at_k={k: mean(per_query[f"hit@{k}"]) for k in k_values},
+        ndcg_at_k={k: mean(per_query[f"ndcg@{k}"]) for k in k_values},
+        mrr=mean(per_query["mrr"]),
+        per_query=per_query,
     )
 
 
