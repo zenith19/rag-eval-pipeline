@@ -338,7 +338,7 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Seven so far; these five are picked because they document
+trade-off → measured validation. Nine so far; these are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -348,6 +348,8 @@ mistakes rather than successes:
 | [004](docs/decisions/004-provenance-and-the-48-paper-baseline.md) | Expanding 9 → 48 papers: recall@1 held, depth collapsed, and why that changes the next step |
 | [006](docs/decisions/006-containerising-with-a-baked-index.md) | Two failures that only appeared when the container actually ran |
 | [007](docs/decisions/007-deploying-to-lambda.md) | Why the runtime identity cannot deploy, and what the deploy identity may touch |
+| [008](docs/decisions/008-a-non-circular-eval-set.md) | The gold labels were sourced from the retriever being graded, and what changed when they were not |
+| [009](docs/decisions/009-what-deploying-taught-that-reading-did-not.md) | Eight deployment failures no amount of reading the config would have caught |
 
 ## License
 
