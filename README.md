@@ -1,5 +1,8 @@
 # RAG Evaluation Pipeline
 
+**[Try it →](https://413de9svs9.execute-api.eu-central-1.amazonaws.com/)**  ·  deployed on AWS
+Lambda in `eu-central-1`, answering from 48 papers with page-level citations.
+
 Retrieval-augmented question answering over a corpus of NLP research papers (coreference
 resolution and low-resource language modeling) — the kind of literature review this was
 built to make searchable. A grounded question-answering backend and retrieval-evaluation
@@ -19,47 +22,53 @@ between requests.
 
 ## Retrieval results
 
-Measured on a hand-labeled set of 10 questions over a corpus of 48 papers (1,688 chunks).
-Recall@k is the fraction of relevant chunks found in the top k; hit-rate@k is whether at
-least one relevant chunk is in the top k; MRR is the mean reciprocal rank of the first
-relevant chunk.
+Measured on a frozen, hand-verified set of **42 questions** (50 gold chunks spanning 37 of
+the 48 papers, 1,688 chunks indexed). Recall@k is the fraction of relevant chunks found in
+the top k; hit-rate@k is whether at least one relevant chunk is in the top k; MRR is the
+mean reciprocal rank of the first relevant chunk.
 
-| k  | recall@k | hit-rate@k | recall@k (9 papers) | hit-rate@k (9 papers) |
-|----|----------|------------|---------------------|-----------------------|
-| 1  | 0.35     | 0.70       | 0.35                | 0.70                  |
-| 3  | 0.55     | 0.80       | 0.65                | 0.80                  |
-| 5  | 0.70     | 0.90       | 0.80                | 0.90                  |
-| 10 | 0.75     | 0.90       | 0.95                | 1.00                  |
-| 20 | 0.85     | 0.90       | —                   | —                     |
-| 50 | 0.95     | 1.00       | —                   | —                     |
+| k   | recall@k | hit-rate@k |
+|-----|----------|------------|
+| 1   | 0.393    | 0.476      |
+| 3   | 0.583    | 0.643      |
+| 5   | 0.667    | 0.714      |
+| 10  | 0.774    | 0.810      |
+| 20  | 0.869    | 0.881      |
+| 50  | 0.917    | 0.929      |
+| 100 | 0.940    | 0.952      |
 
-**MRR: 0.77** (0.79 on the 9-paper corpus).
+**MRR@10: 0.578.** MRR is truncated at the deepest k scored, so it is always quoted with its
+depth — the same run reports 0.584 when k=100 is included.
 
-The corpus was expanded from 9 papers to the 48 that make up the underlying literature
-review, and the numbers were re-measured rather than quietly kept. The result is more
-interesting than a uniform decline:
+### How the labels were made, and why it matters
 
-- **Top-1 did not move.** recall@1 is still 0.35 and hit-rate@1 still 0.70, despite more
-  than five times as many documents competing for the top slot — including a dozen further
-  coreference papers covering much the same ground.
-- **Depth collapsed.** recall@10 fell 0.95 → 0.75. Gold chunks are not lost — they are
-  pushed deeper. Reaching the coverage that k=10 used to give now takes k=50
-  (recall@50 0.95, hit-rate@50 1.00).
+The first ten questions were labelled by running a query through the retriever and choosing
+gold chunks from its own top-k. That is circular: a chunk the retriever ranks 50th can never
+become a label, so recall is measured against an answer key the retriever helped write, and
+comes out too high.
 
-That changes what the next step should be. The earlier reading — "coverage is solved,
-ranking is the bottleneck" — held when recall@10 was 0.95. It no longer does at the depth a
-cross-encoder reranker typically works over: at k=20 recall is 0.85, so a reranker fed the
-top 20 candidates cannot recover 15% of the relevant material no matter how good it is. The
-reranker experiment therefore has to treat the candidate-pool size as a parameter to
-measure, not assume. Hybrid (dense + sparse) search is still not obviously required:
-hit-rate@50 of 1.00 says dense retrieval does find every question's evidence eventually.
+The 32 questions added since are built the other way round. `scripts/sample_chunks.py` draws
+chunks first — stratified per paper, references and acknowledgements skipped — and each
+question is written from the sampled chunk without consulting the retriever at all. The
+retriever never sees a label before it is scored on it. Drafts live in `evaluation/drafting/`
+with the quoted line justifying each gold ID, so any label can be re-checked rather than
+taken on trust.
 
-Caveat, stated plainly: this is 10 questions. Each one is 10% of hit-rate, and the moves
-above are one or two questions apiece. The numbers are directionally useful and not
-statistically meaningful — which is why the next release freezes a ~40-question set before
-running any comparison. (Some questions are labeled with more than one relevant chunk,
-which caps their attainable recall@1; hit-rate@1 — the right paper ranked first — is the
-more representative single-result figure.)
+### What the numbers say about what to build next
+
+**Ranking is the main lever, but coverage is not solved.** recall@1 is 0.393 while recall@20
+is 0.869: most relevant material *is* retrieved and simply ranked badly, which is what a
+cross-encoder reranker fixes. That 48-point gap is the opportunity.
+
+But recall@100 stops at **0.940**. Roughly 6% of gold chunks are unreachable at any practical
+depth, and a reranker cannot recover them — they never enter the candidate pool. So hybrid
+(dense + sparse) retrieval is no longer excluded on evidence; it has a target to beat, and
+the reranker experiment must treat candidate-pool size as a measured parameter rather than
+an assumption.
+
+This replaces an earlier reading, taken from 10 questions, that coverage was fine and only
+ranking needed work. Expanding the eval set contradicted it. The plan changed rather than
+the measurement.
 
 Reproduce with `python -m evaluation.run_eval`, or check against the committed baseline with
 `python -m evaluation.compare_baseline`.
@@ -71,8 +80,8 @@ hand-computed values, rather than imported from an evaluation library.
 
 ```mermaid
 flowchart TD
-    S3[("AWS S3<br/>research papers")] --> ING["ingest &rarr; chunk &rarr; embed<br/>(bge-small)"]
-    ING --> Q[("Qdrant<br/>(Docker)")]
+    D[("data/ &mdash; 48 papers<br/>backed up to S3")] --> ING["ingest &rarr; chunk &rarr; embed<br/>(bge-small)"]
+    ING --> Q[("Qdrant<br/>server locally, embedded in the image")]
     Q --> R["shared retriever"]
 
     R --> EV["eval harness (offline)<br/>recall@k &middot; hit-rate@k &middot; MRR"]
@@ -80,22 +89,69 @@ flowchart TD
     R --> AG["LangGraph agent<br/>retrieve &rarr; generate &rarr; verify<br/>bounded retry"]
     R --> MCP["MCP server (agent tools)<br/>search_documents &middot; ask_question &middot; evaluate_retrieval"]
 
-    API --> BR["Amazon Bedrock (Nova)<br/>answer + source chunk IDs"]
+    API --> BR["Amazon Bedrock (Nova Lite)<br/>answer + source chunk IDs"]
     AG --> BR
     MCP --> BR
 ```
 
 The retriever is a single shared component with four consumers — the offline evaluation
 harness, the FastAPI service, the LangGraph agent, and the MCP server — so a change in
-retrieval strategy is measured and exposed through one code path with no duplication.
+retrieval strategy is measured and exposed through one code path with no duplication. A
+parity test (`tests/test_retrieval_parity.py`) fails if a second query site ever appears.
+
+## Deployment
+
+```mermaid
+flowchart LR
+    V(["visitor"]) --> GW["API Gateway (HTTP)<br/>$default route"]
+    GW -- "assumes role" --> L["Lambda<br/>container image, 3008 MB<br/>index baked in"]
+    L --> BRD["Bedrock Nova Lite<br/>eu-central-1"]
+    EB["EventBridge<br/>rate(5 minutes)"] -- "assumes role" --> L
+    ECR[("ECR<br/>image, tagged by commit")] -.-> L
+```
+
+Everything is Terraform (`infra/`). The Qdrant index is built at image-build time and baked
+in, so there is no database process and nothing billed between requests — the whole thing
+costs roughly €0.50/month at rest.
+
+**Two constraints shaped this, both discovered by deploying rather than by reading docs.**
+
+*Lambda resource-based policies are not enforced on this account.* A SigV4-signed request
+from a principal granted via `lambda:AddPermission` returns 403, while the same request from
+a principal with an identity-based grant returns 200. That rules out a public Function URL
+and also CloudFront with Origin Access Control, which signs as a service principal and is
+authorised by exactly such a policy. API Gateway invokes Lambda through an **integration
+role** instead, so authorisation runs through an identity policy. There is no
+`aws_lambda_permission` anywhere in `infra/`, and that absence is the design.
+
+*A cold `/ask` takes ~47s against a 30s gateway ceiling.* Loading torch and the embedding
+model dominates; the ceiling is an AWS maximum, not a setting. An EventBridge schedule keeps
+one container warm — pinging the retriever, not `/health`, which returns in 17.8s cold
+precisely because it never loads the model. The demo page retries on 503 for the case a
+schedule cannot cover: a second simultaneous visitor still gets a cold container.
+
+| measured on the deployed service | |
+|---|---|
+| `/ask` warm | 0.4–1.1s |
+| `/ask` cold | ~47s |
+| cold start, 3008 MB | 18.7s |
+| cold start, 2048 MB | 62.1s |
+
+Cold start is CPU-bound, not memory-bound — peak usage is 970 MB. Lambda scales CPU with
+memory, so the jump from 2048 to 3008 MB (this account's ceiling) buys cores, not RAM. The
+honest fix is getting torch out of the request path by embedding queries through Bedrock;
+the schedule is a mitigation, not a cure.
 
 ## Tech stack
 
 - **Embeddings:** sentence-transformers (`BAAI/bge-small-en-v1.5`), runs on CPU
 - **Vector store:** Qdrant, run as a Docker container (via `docker-compose`)
 - **Generation:** Amazon Bedrock (`eu.amazon.nova-lite-v1:0`, region `eu-central-1`)
-- **Document storage:** AWS S3, with a local-folder fallback for offline development
-- **API:** FastAPI + Uvicorn
+- **Corpus:** `data/`, gitignored and backed up to S3 by `scripts/backup_corpus.py`. 39 of the
+  48 papers are re-fetchable from `scripts/corpus_manifest.csv`; the other 9 exist only there,
+  so the bucket is versioned and the backup script can upload but never delete
+- **API:** FastAPI + Uvicorn, adapted to Lambda with Mangum
+- **Deployment:** Terraform — API Gateway (HTTP), Lambda container, ECR, EventBridge, Budgets
 - **Agent layer:** MCP server (tools for AI agents) and a minimal LangGraph flow
 - **Evaluation:** recall@k, hit-rate@k, MRR implemented from scratch
 
@@ -249,8 +305,13 @@ python -m agent.graph
 Retrieval is scored across k = 1, 3, 5, 10 so that a retrieval problem (low recall@10) is
 distinguishable from a ranking problem (good recall@10 but low recall@1 / MRR). Recall@k
 and hit-rate@k are reported separately on purpose: they coincide only when each question
-has exactly one relevant chunk. The eval set is small and hand-labeled, intended as a
-reproducible baseline rather than a large benchmark.
+has exactly one relevant chunk. The eval set is frozen before any comparison is run, so a
+retrieval change is scored against an answer key that predates it.
+
+42 questions is enough to rank two systems and not enough to trust small differences: one
+question moves hit-rate by 2.4 points, and the committed baseline's ±3% tolerance is about
+1.3 questions. Bootstrap confidence intervals are the next addition to the harness, and
+they matter before any reranker comparison is believed.
 
 See [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for design rationale and what is
 deliberately out of scope.
@@ -274,7 +335,7 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Seven so far; these four are picked because they document
+trade-off → measured validation. Seven so far; these five are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -283,6 +344,7 @@ mistakes rather than successes:
 | [002](docs/decisions/002-corpus-from-the-bibliography.md) | Three resolver bugs that would have corrupted the corpus silently |
 | [004](docs/decisions/004-provenance-and-the-48-paper-baseline.md) | Expanding 9 → 48 papers: recall@1 held, depth collapsed, and why that changes the next step |
 | [006](docs/decisions/006-containerising-with-a-baked-index.md) | Two failures that only appeared when the container actually ran |
+| [007](docs/decisions/007-deploying-to-lambda.md) | Why the runtime identity cannot deploy, and what the deploy identity may touch |
 
 ## License
 
