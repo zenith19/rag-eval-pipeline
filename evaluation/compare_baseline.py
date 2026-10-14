@@ -26,6 +26,7 @@ def _current() -> dict:
         "mrr": round(report.mrr, 3),
         "recall_at_k": {str(k): round(report.recall_at_k[k], 3) for k in K_VALUES},
         "hit_rate_at_k": {str(k): round(report.hit_rate_at_k[k], 3) for k in K_VALUES},
+        "ndcg_at_k": {str(k): round(report.ndcg_at_k[k], 3) for k in K_VALUES},
         "_n": report.n_queries,
     }
 
@@ -41,8 +42,11 @@ def main() -> int:
 
     rows, regressions = [], []
     for name, key in (("MRR", "mrr"), *((f"recall@{k}", ("recall_at_k", str(k))) for k in K_VALUES),
-                      *((f"hit@{k}", ("hit_rate_at_k", str(k))) for k in K_VALUES)):
+                      *((f"hit@{k}", ("hit_rate_at_k", str(k))) for k in K_VALUES),
+                      *((f"nDCG@{k}", ("ndcg_at_k", str(k))) for k in K_VALUES)):
         if isinstance(key, tuple):
+            if key[0] not in base["metrics"]:
+                continue  # metric added after this baseline was recorded
             b, c = base["metrics"][key[0]][key[1]], now[key[0]][key[1]]
         else:
             b, c = base["metrics"][key], now[key]

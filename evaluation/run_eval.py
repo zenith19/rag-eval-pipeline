@@ -22,10 +22,17 @@ def main() -> None:
     retriever = DenseRetriever()  # one instance: loading the model twice is pure cost
 
     shallow = evaluate(retriever, eval_set, k_values=SHALLOW)
-    print(shallow.pretty())
+    print(shallow.pretty(intervals=True))
     print(
         f"\n(MRR is truncated at the deepest k scored, so the figure above is "
         f"MRR@{max(SHALLOW)}.)"
+    )
+    print(
+        "(Intervals are how much each figure depends on WHICH questions were asked,\n"
+        " not how precisely they were computed. They are wide because 42 questions\n"
+        " is few. Comparing two retrievers uses bootstrap_delta_ci on the same\n"
+        " questions instead, which cancels that shared variation — overlapping\n"
+        " intervals here do not mean two systems are indistinguishable.)"
     )
 
     deep = evaluate(retriever, eval_set, k_values=DEEP)

@@ -70,17 +70,26 @@ def evaluate_retrieval() -> dict:
     """Score the retriever against the hand-labeled eval set.
 
     Returns:
-        {mrr, per_k} with recall@k and hit_rate@k for k in 1, 3, 5, 10.
+        {mrr, mrr_ci, per_k} with recall@k, hit_rate@k and ndcg@k for k in
+        1, 3, 5, 10, plus a 95% bootstrap interval on MRR.
+
+    The interval is included because the alternative is an agent reading 0.578
+    as exact. On 42 questions it is not: the interval is roughly +/-0.13 wide,
+    and a tool that reports the point estimate alone invites a confident wrong
+    conclusion from whatever is consuming it.
     """
     eval_set = load_eval_set(DEFAULT_EVAL_SET)
     report = evaluate(_retriever, eval_set, k_values=(1, 3, 5, 10))
+    mrr_lo, mrr_hi = report.ci("mrr")
     return {
         "queries_evaluated": len(eval_set),
         "mrr": round(report.mrr, 3),
+        "mrr_ci_95": [round(mrr_lo, 3), round(mrr_hi, 3)],
         "per_k": {
             str(k): {
                 "recall": round(report.recall_at_k[k], 3),
                 "hit_rate": round(report.hit_rate_at_k[k], 3),
+                "ndcg": round(report.ndcg_at_k[k], 3),
             }
             for k in report.recall_at_k
         },
