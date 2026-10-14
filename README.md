@@ -303,7 +303,10 @@ python -m agent.graph
 ## Evaluation methodology
 
 Retrieval is scored across k = 1, 3, 5, 10 so that a retrieval problem (low recall@10) is
-distinguishable from a ranking problem (good recall@10 but low recall@1 / MRR). Recall@k
+distinguishable from a ranking problem (good recall@10 but low recall@1 / MRR), and again at
+k = 20, 50, 100 because those answer a different question: whether the gold chunk is
+reachable at all. A reranker can only reorder what the retriever already returned, so
+recall@100 is the ceiling on what reranking could ever recover. Recall@k
 and hit-rate@k are reported separately on purpose: they coincide only when each question
 has exactly one relevant chunk. The eval set is frozen before any comparison is run, so a
 retrieval change is scored against an answer key that predates it.
