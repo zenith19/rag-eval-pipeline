@@ -14,6 +14,16 @@ import os
 COLLECTION = os.environ.get("RAG_COLLECTION", "documents")
 MODEL_NAME = os.environ.get("RAG_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 VECTOR_SIZE = 384  # bge-small-en-v1.5; changing the model means changing this
+
+# Cross-encoder used by CrossEncoderRetriever. Scores (query, passage) pairs jointly
+# rather than comparing two independent vectors, which is why it can reorder what the
+# bi-encoder ranked badly — and why it costs a forward pass per candidate.
+RERANK_MODEL = os.environ.get("RAG_RERANK_MODEL", "BAAI/bge-reranker-base")
+
+# How many candidates the reranker is given before it returns k. Not a free choice:
+# recall@POOL is the ceiling on what reranking can reach, since it only reorders what
+# dense retrieval already returned. Measured, not assumed — see docs/decisions/008.
+RERANK_POOL = int(os.environ.get("RAG_RERANK_POOL", "50"))
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "6333"))
 
