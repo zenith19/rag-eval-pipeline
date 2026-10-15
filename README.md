@@ -170,6 +170,11 @@ schedule cannot cover: a second simultaneous visitor still gets a cold container
 | cold start, 3008 MB | 18.7s |
 | cold start, 2048 MB | 62.1s |
 
+Cold start is CPU-bound, not memory-bound — peak usage is 970 MB. Lambda scales CPU with
+memory, so the jump from 2048 to 3008 MB (this account's ceiling) buys cores, not RAM. The
+honest fix is getting torch out of the request path by embedding queries through Bedrock;
+the schedule is a mitigation, not a cure.
+
 ### When it fails
 
 `/ask` never returns a bare 500. Bedrock is called with a connect and read timeout and a bounded
@@ -186,11 +191,6 @@ That last row is the grounding claim being honest: asking the model to answer fr
 context is an invitation to invent one. Retrieval failures are deliberately *not* caught — a
 broken index is a deployment fault, and masking it would hide the one thing worth paging about.
 Each path is covered by fault injection in `tests/test_failure_modes.py`, with no AWS involved.
-
-Cold start is CPU-bound, not memory-bound — peak usage is 970 MB. Lambda scales CPU with
-memory, so the jump from 2048 to 3008 MB (this account's ceiling) buys cores, not RAM. The
-honest fix is getting torch out of the request path by embedding queries through Bedrock;
-the schedule is a mitigation, not a cure.
 
 ## Tech stack
 
