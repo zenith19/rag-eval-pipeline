@@ -24,6 +24,15 @@ RERANK_MODEL = os.environ.get("RAG_RERANK_MODEL", "BAAI/bge-reranker-base")
 # recall@POOL is the ceiling on what reranking can reach, since it only reorders what
 # dense retrieval already returned. Measured, not assumed — see docs/decisions/008.
 RERANK_POOL = int(os.environ.get("RAG_RERANK_POOL", "50"))
+
+# Bedrock timeouts and retries. Budgeted against the 30s HTTP API integration ceiling
+# (docs/decisions/009), not against Lambda's 90s, because the gateway gives up first:
+# worst case here is connect + 3 attempts * read, which must leave room for retrieval
+# and still land inside 30s. A longer read timeout would be a timeout the caller never
+# waits for.
+BEDROCK_CONNECT_TIMEOUT = float(os.environ.get("RAG_BEDROCK_CONNECT_TIMEOUT", "3"))
+BEDROCK_READ_TIMEOUT = float(os.environ.get("RAG_BEDROCK_READ_TIMEOUT", "8"))
+BEDROCK_MAX_ATTEMPTS = int(os.environ.get("RAG_BEDROCK_MAX_ATTEMPTS", "3"))
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "6333"))
 
