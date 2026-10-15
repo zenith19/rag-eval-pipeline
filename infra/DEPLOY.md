@@ -62,8 +62,13 @@ terraform -chdir=infra init
 terraform -chdir=infra plan      # ECR repo first: the image must exist before the function does
 terraform -chdir=infra apply -target=aws_ecr_repository.app
 
-# build and push (~2.4 GB; the build re-embeds the corpus and takes ~9 min)
-docker build -t rag-eval-pipeline .
+# build and push (~2.4 GB; a dependency change re-embeds the corpus, ~9 min)
+#
+# --provenance=false --sbom=false is required, not tidiness: buildx otherwise
+# attaches an attestation manifest, making the push an OCI image INDEX rather than
+# a single manifest, and Lambda rejects that with an unhelpful "source image does
+# not exist" at CreateFunction time.
+docker build --provenance=false --sbom=false -t rag-eval-pipeline .
 REPO=$(terraform -chdir=infra output -raw ecr_repository_url)
 .venv/bin/python -m awscli ecr get-login-password --region eu-central-1 \
   | docker login --username AWS --password-stdin "${REPO%%/*}"
@@ -72,7 +77,7 @@ docker push "$REPO:$TAG"
 
 # image_tag defaults to "latest"; pass the real tag so the deploy names a commit
 terraform -chdir=infra apply -var "image_tag=$TAG"
-curl -s "$(terraform -chdir=infra output -raw function_url)health"
+curl -s "$(terraform -chdir=infra output -raw demo_url)health"
 ```
 
 `python -m awscli`, not `aws`: the console script carries a shebang pointing at an interpreter path
@@ -99,6 +104,18 @@ lingering at roughly €0.24/month per 2.4 GB image.
 
 - `aws` as a console script does not work in this checkout — the path contains a space and a
   shebang cannot express it. Use `.venv/bin/python -m awscli` if `aws` is not on PATH system-wide.
-- The Function URL is `authorization_type = "NONE"`, i.e. public. That is deliberate — a link
-  nobody can open proves nothing — and is why `max_concurrency`, `rate_limit_per_min` and the
-  budget alarm exist. Check the budget alarm is real before leaving the URL in a CV.
+- **The public endpoint is API Gateway, not a Lambda Function URL.** Lambda resource-based
+  policies are not enforced on this account, so an anonymous Function URL returns 403 whatever the
+  policy says, and so does CloudFront with Origin Access Control. API Gateway invokes Lambda
+  through an integration role instead, which authorises via an identity policy. There is no
+  `aws_lambda_permission` in `infra/`, and adding one would be silently ineffective here. The
+  reproduction is in `docs/decisions/009`.
+- **`reserved_concurrent_executions` is -1**, because reserving any concurrency requires 10 to stay
+  unreserved and this account's total limit *is* 10. The account limit is the ceiling instead. Set
+  `max_concurrency` to a real number once that quota is raised.
+- The endpoint is public on purpose — a link nobody can open proves nothing — which is why the
+  per-IP rate limit and the budget alarm exist. Check the budget alarm is real before leaving the
+  URL in a CV.
+- **HTTP API integrations time out at 30s**, an AWS maximum. A cold `/ask` takes ~47s, so an
+  EventBridge schedule keeps one container warm; see `docs/decisions/010` for why the reranker was
+  not deployed into that budget.

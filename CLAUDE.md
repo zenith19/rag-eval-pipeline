@@ -27,12 +27,19 @@ Decisions live in `docs/decisions/`.
 - Credentials come from `~/.aws/credentials` (profile `default`); `~/.aws/config` sets
   `region = eu-central-1`. boto3 finds them automatically.
 - The IAM user is `bedrock-dev`, carrying `AmazonBedrockFullAccess` and `AmazonS3ReadOnlyAccess`.
-  **It cannot deploy** — ECR, Lambda, IAM roles, log groups and Budgets are all outside those two
-  policies, so `terraform apply` needs a different identity (see `docs/decisions/007`).
+  **It cannot deploy** — ECR, Lambda, IAM roles, log groups, API Gateway, EventBridge and Budgets
+  are all outside those two policies. `terraform apply` and `scripts/backup_corpus.py` both run as
+  the separate `rag-deploy` identity, whose policy is `infra/deploy-policy.json`. See
+  `infra/DEPLOY.md` and `docs/decisions/007`.
 - Model ID is `eu.amazon.nova-lite-v1:0`. The `eu.` inference-profile prefix is required in this
   region; without it Bedrock reports "on-demand throughput isn't supported".
 - `RAG_S3_BUCKET` (e.g. `zenith-rag-docs-2026`) switches ingestion to S3; unset, it reads `data/`.
-  Note the bucket holds the original 9 papers, not the 48-paper corpus.
+  The bucket now holds all 48 papers and is versioned — `scripts/backup_corpus.py` keeps it in
+  step. It is a backup, not the serving path: the index is baked into the image.
+- **Lambda resource-based policies are not enforced on this account.** A grant made with
+  `lambda:AddPermission` has no effect, which rules out a public Function URL and CloudFront OAC.
+  API Gateway and EventBridge both invoke through integration roles instead. Do not add an
+  `aws_lambda_permission` expecting it to work; `docs/decisions/009` has the reproduction.
 
 Rules: never hardcode or print keys, account IDs or `~/.aws/*`. Never change the region or model ID
 to work around an error — diagnose it. If credentials are invalid, stop and say so rather than

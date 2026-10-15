@@ -1,5 +1,10 @@
 # Project Plan — RAG Evaluation Pipeline
 
+> **Historical.** This is the plan as written before any of it was built, kept because the
+> difference between it and what happened is the interesting part — the numbers below were
+> superseded, the "stretch" items were done and one of them was measured and rejected. For what is
+> true now, read `README.md`; for why each change was made, `docs/decisions/`.
+
 Retrieval-augmented question answering over a PDF document corpus, built around a
 **from-scratch retrieval evaluation harness** (recall@k, hit-rate@k, MRR) rather than a
 black-box "load PDF, ask question" demo. The evaluation layer is the centrepiece: the goal
@@ -85,8 +90,15 @@ rag-eval-pipeline/
 - **Ingestion** — done. Reads PDFs from S3 (local fallback), chunks with overlap, assigns stable chunk IDs.
 - **Index & retrieve** — done. Chunks embedded and indexed in Qdrant; a shared `DenseRetriever` returns ranked chunk IDs.
 - **Generate & serve** — done. `generate.py` builds a grounded prompt and calls Bedrock; `api/main.py` exposes `GET /health` and `POST /ask` returning an answer plus source chunk IDs.
-- **Evaluate** — done. Hand-labelled eval set scored with recall@k / hit-rate@k / MRR over a 9-paper corpus (249 chunks). Baseline: recall@10 0.95, MRR 0.79.
-- **Stretch (optional, not done):** hybrid retrieval and/or a cross-encoder reranker, reported as before/after deltas on the same eval set; containerisation (Docker) and a scale-to-zero deployment.
+- **Evaluate** — done, then redone. The figures here (9-paper corpus, 249 chunks, recall@10 0.95,
+  MRR 0.79) are superseded twice over: the corpus grew to 48 papers, and the eval set was rebuilt
+  because its labels had been drawn from the retriever being scored. Current figures are in
+  `README.md` and `evaluation/baseline.json`; the labelling problem is `docs/decisions/008`.
+- **Stretch — done.** The cross-encoder reranker was built, measured, and deliberately not
+  deployed (`docs/decisions/010`). Containerisation and a scale-to-zero deployment are live:
+  AWS Lambda behind API Gateway, index baked into the image, no database process
+  (`docs/decisions/006`, `009`). Hybrid retrieval is still open, and now has evidence behind it
+  rather than being a guess — recall@100 of 0.940 leaves a coverage gap no reranker can close.
 
 ## 7. Evaluation methodology
 
@@ -94,6 +106,10 @@ rag-eval-pipeline/
 - **hit-rate@k** = 1 if any relevant chunk is in the top-k — kept separate from recall@k on purpose (they coincide only when each query has exactly one relevant chunk).
 - **MRR** = mean reciprocal rank of the first relevant chunk — ranking quality.
 - Reported across **k = 1, 3, 5, 10** and against a baseline, so a retrieval problem (low recall@10) is distinguishable from a ranking problem (good recall@10 but low recall@1 / MRR).
+- Since added: **nDCG@k**, because the three above cannot see a reranker moving a relevant chunk
+  from rank 9 to rank 2; **bootstrap confidence intervals**, which turned out to be ±0.13 wide on
+  42 questions; and **paired significance testing**, because two systems answering the same
+  questions must be compared on per-query differences, not on whether their intervals overlap.
 - The eval set is small and hand-labelled — a reproducible baseline, not a large benchmark. Answer-level evaluation (faithfulness / answer relevance) is a possible later addition; retrieval metrics come first because retrieval quality caps everything downstream.
 
 ## 8. Out of scope (on purpose)

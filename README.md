@@ -27,18 +27,25 @@ the 48 papers, 1,688 chunks indexed). Recall@k is the fraction of relevant chunk
 the top k; hit-rate@k is whether at least one relevant chunk is in the top k; MRR is the
 mean reciprocal rank of the first relevant chunk.
 
-| k   | recall@k | hit-rate@k |
-|-----|----------|------------|
-| 1   | 0.393    | 0.476      |
-| 3   | 0.583    | 0.643      |
-| 5   | 0.667    | 0.714      |
-| 10  | 0.774    | 0.810      |
-| 20  | 0.869    | 0.881      |
-| 50  | 0.917    | 0.929      |
-| 100 | 0.940    | 0.952      |
+| k   | recall@k | hit-rate@k | nDCG@k | recall@k 95% CI  |
+|-----|----------|------------|--------|------------------|
+| 1   | 0.393    | 0.476      | 0.476  | [0.262, 0.524]   |
+| 3   | 0.583    | 0.643      | 0.527  | [0.440, 0.714]   |
+| 5   | 0.667    | 0.714      | 0.564  | [0.536, 0.798]   |
+| 10  | 0.774    | 0.810      | 0.598  | [0.655, 0.881]   |
+| 20  | 0.869    | 0.881      | —      | —                |
+| 50  | 0.917    | 0.929      | —      | —                |
+| 100 | 0.940    | 0.952      | —      | —                |
 
-**MRR@10: 0.578.** MRR is truncated at the deepest k scored, so it is always quoted with its
-depth — the same run reports 0.584 when k=100 is included.
+**MRR@10: 0.578**, 95% CI [0.448, 0.705]. MRR is truncated at the deepest k scored, so it is
+always quoted with its depth — the same run reports 0.584 when k=100 is included.
+
+The intervals are percentile bootstrap over queries and they are **±0.13 wide**, an order of
+magnitude more than the ±3% tolerance on the committed baseline. Those two numbers answer
+different questions: the tolerance guards against a change in *this* measurement, the interval
+says how much the figure depends on *which* 42 questions were asked. Two retrievers are therefore
+compared on per-query differences (`bootstrap_delta_ci`), not by checking whether these overlap —
+at this width they always will.
 
 ### How the labels were made, and why it matters
 
@@ -70,7 +77,33 @@ This replaces an earlier reading, taken from 10 questions, that coverage was fin
 ranking needed work. Expanding the eval set contradicted it. The plan changed rather than
 the measurement.
 
-Reproduce with `python -m evaluation.run_eval`, or check against the committed baseline with
+### Reranking: measured, and deliberately not shipped
+
+A cross-encoder (`bge-reranker-base`) reorders the dense candidates. The hypothesis was written
+down before the run: ranking looked like the bottleneck, so reordering should help.
+
+| candidate pool | recall@10 after rerank | ceiling (dense recall@pool) | ms/query |
+|---|---|---|---|
+| 10 | 0.774 | 0.774 | 8,309 |
+| **20** | **0.869** | **0.869** | 15,781 |
+| 50 | 0.857 | 0.917 | 41,052 |
+| 100 | 0.821 | 0.940 | 84,693 |
+
+At pool 20 it is perfect — 0.869 is exactly dense recall@20, so every gold chunk reachable in the
+top 20 was pulled into the top 10. The hypothesis holds. Then quality *falls* as the pool grows
+even though the ceiling rises: more candidates means more plausible-but-wrong passages to promote.
+
+The one interval clearing zero in the whole sweep is pool 20's recall@10, **+0.095, 95% CI
+[+0.024, +0.190]**. Twenty intervals were computed, so about one false positive is expected by
+chance; what argues for a real effect is that nearly every delta at every pool is positive.
+
+**It is not deployed.** 15.8s/query is 132× dense against a 30s gateway ceiling, to buy an
+improvement 42 questions cannot firmly establish — and it cannot touch the ~6% of gold chunks
+dense retrieval never reaches, which is the coverage problem that remains. See
+[decision 010](docs/decisions/010-the-reranker-works-and-is-not-worth-shipping.md).
+
+Reproduce with `python -m evaluation.run_eval`, compare retrievers with
+`python -m evaluation.compare_retrievers --pool 20`, or check against the committed baseline with
 `python -m evaluation.compare_baseline`.
 
 The metrics are implemented from scratch (`evaluation/eval_harness.py`) and verified against
@@ -313,8 +346,8 @@ retrieval change is scored against an answer key that predates it.
 
 42 questions is enough to rank two systems and not enough to trust small differences: one
 question moves hit-rate by 2.4 points, and the committed baseline's ±3% tolerance is about
-1.3 questions. Bootstrap confidence intervals are the next addition to the harness, and
-they matter before any reranker comparison is believed.
+1.3 questions. That is why every comparison reports a bootstrap interval, and why the reranker
+below is reported as a negative result despite moving every metric in the right direction.
 
 See [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for design rationale and what is
 deliberately out of scope.
@@ -338,7 +371,7 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Nine so far; these are picked because they document
+trade-off → measured validation. Ten so far; these are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -350,6 +383,7 @@ mistakes rather than successes:
 | [007](docs/decisions/007-deploying-to-lambda.md) | Why the runtime identity cannot deploy, and what the deploy identity may touch |
 | [008](docs/decisions/008-a-non-circular-eval-set.md) | The gold labels were sourced from the retriever being graded, and what changed when they were not |
 | [009](docs/decisions/009-what-deploying-taught-that-reading-did-not.md) | Eight deployment failures no amount of reading the config would have caught |
+| [010](docs/decisions/010-the-reranker-works-and-is-not-worth-shipping.md) | The reranker does what it was predicted to do, and still should not ship |
 
 ## License
 
