@@ -162,3 +162,39 @@ def test_a_working_request_is_unaffected(api, bedrock):
     body = r.json()
     assert body["answer"] == "Kuhn-Munkres."
     assert body["sources"][0]["citation"] == "paper.pdf p.2"
+
+
+def test_timeout_budget_fits_inside_the_gateway_ceiling():
+    """The retry budget must finish before API Gateway stops waiting.
+
+    If it overruns, the visitor gets the gateway's 504 instead of this service's
+    503 — no Retry-After, no explanation — which would quietly undo the point of
+    classifying failures at all. An earlier setting (connect 3, read 8, 3 attempts)
+    came to 33s against a 30s ceiling because it counted the reads and forgot the
+    backoff between them.
+
+    The ceiling is read from infra/main.tf rather than hardcoded, so lowering it
+    there fails here instead of in production.
+    """
+    import re
+    from pathlib import Path
+
+    from rag.config import (
+        BEDROCK_CONNECT_TIMEOUT,
+        BEDROCK_MAX_ATTEMPTS,
+        BEDROCK_READ_TIMEOUT,
+    )
+
+    tf = (Path(__file__).resolve().parent.parent / "infra" / "main.tf").read_text()
+    match = re.search(r"timeout_milliseconds\s*=\s*(\d+)", tf)
+    assert match, "no integration timeout found in infra/main.tf"
+    ceiling_s = int(match.group(1)) / 1000
+
+    # botocore "standard" mode: full-jitter exponential backoff, capped at 20s
+    backoff = sum(min(2**i, 20) for i in range(1, BEDROCK_MAX_ATTEMPTS))
+    worst_case = BEDROCK_CONNECT_TIMEOUT + BEDROCK_READ_TIMEOUT * BEDROCK_MAX_ATTEMPTS + backoff
+
+    # Strictly less, with room for retrieval and request overhead on the same clock.
+    assert worst_case < ceiling_s * 0.8, (
+        f"Bedrock budget {worst_case}s leaves too little of the {ceiling_s}s ceiling"
+    )
