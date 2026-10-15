@@ -4,10 +4,11 @@ import os
 import time
 from collections import defaultdict, deque
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from rag.errors import PermanentGenerationError, TransientGenerationError
 from rag.generate import answer_question
 
 app = FastAPI(title="RAG Evaluation Pipeline")
@@ -65,7 +66,27 @@ def health() -> dict[str, str]:
 
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest) -> AskResponse:
-    answer, chunks = answer_question(request.question, request.k)
+    # Generation failures become a status that says whether retrying helps, rather
+    # than an unhandled exception and a bare 500. The demo page already retries on
+    # 503, so a throttled request reaches the visitor as "waking the model up"
+    # instead of an error box. Retrieval failures are deliberately NOT caught: a
+    # broken index is a deployment fault, and masking it would hide the one thing
+    # worth paging about.
+    try:
+        answer, chunks = answer_question(request.question, request.k)
+    except TransientGenerationError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{exc} Please try again in a moment.",
+            headers={"Retry-After": "5"},
+        ) from exc
+    except PermanentGenerationError as exc:
+        # 502, not 500: this service is working and its upstream is not.
+        raise HTTPException(
+            status_code=502,
+            detail=f"{exc} Retrying will not help; this needs fixing on the server.",
+        ) from exc
+
     return AskResponse(
         answer=answer,
         sources=[

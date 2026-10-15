@@ -24,6 +24,25 @@ RERANK_MODEL = os.environ.get("RAG_RERANK_MODEL", "BAAI/bge-reranker-base")
 # recall@POOL is the ceiling on what reranking can reach, since it only reorders what
 # dense retrieval already returned. Measured, not assumed — see docs/decisions/008.
 RERANK_POOL = int(os.environ.get("RAG_RERANK_POOL", "50"))
+
+# Bedrock timeouts and retries, budgeted against the 30s HTTP API integration ceiling
+# (docs/decisions/009) rather than Lambda's 90s, because the gateway gives up first.
+# If the budget overruns, the visitor gets the gateway's 504 instead of this service's
+# 503 — losing the Retry-After and the explanation, which is the whole point of
+# classifying the failure.
+#
+# The arithmetic has to include the backoff BETWEEN attempts, not just the reads:
+#   connect + attempts x read + sum(2^i for i in 1..attempts-1)
+#   2 + 2x6 + 2 = 16s, against a 30s ceiling, leaving room for a cold retrieval.
+# An earlier 3/8/3 looked reasonable and came to 33s, over the ceiling it cited.
+#
+# One retry, not two: the budget buys either a second attempt or a longer read, and
+# a second attempt is worth more against throttling. Anything beyond that becomes a
+# 503 the caller retries with its own fresh budget.
+BEDROCK_CONNECT_TIMEOUT = float(os.environ.get("RAG_BEDROCK_CONNECT_TIMEOUT", "2"))
+BEDROCK_READ_TIMEOUT = float(os.environ.get("RAG_BEDROCK_READ_TIMEOUT", "6"))
+BEDROCK_MAX_ATTEMPTS = int(os.environ.get("RAG_BEDROCK_MAX_ATTEMPTS", "2"))
+
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "6333"))
 

@@ -175,6 +175,23 @@ memory, so the jump from 2048 to 3008 MB (this account's ceiling) buys cores, no
 honest fix is getting torch out of the request path by embedding queries through Bedrock;
 the schedule is a mitigation, not a cure.
 
+### When it fails
+
+`/ask` never returns a bare 500. Bedrock is called with a connect and read timeout and a bounded
+retry that botocore applies only to errors AWS marks retryable, and whatever escapes is classified
+by whether trying again would help:
+
+| What happened | Response |
+|---|---|
+| Throttled, timed out, service fault | **503** with `Retry-After` — the demo page retries behind "waking the model up" |
+| Permission, validation, model not enabled | **502**, saying plainly that retrying will not help |
+| Retrieval found nothing | **200** with "I could not find anything in the indexed papers" |
+
+That last row is the grounding claim being honest: asking the model to answer from an empty
+context is an invitation to invent one. Retrieval failures are deliberately *not* caught — a
+broken index is a deployment fault, and masking it would hide the one thing worth paging about.
+Each path is covered by fault injection in `tests/test_failure_modes.py`, with no AWS involved.
+
 ## Tech stack
 
 - **Embeddings:** sentence-transformers (`BAAI/bge-small-en-v1.5`), runs on CPU
@@ -347,7 +364,7 @@ retrieval change is scored against an answer key that predates it.
 42 questions is enough to rank two systems and not enough to trust small differences: one
 question moves hit-rate by 2.4 points, and the committed baseline's ±3% tolerance is about
 1.3 questions. That is why every comparison reports a bootstrap interval, and why the reranker
-below is reported as a negative result despite moving every metric in the right direction.
+above is reported as a negative result despite moving every metric in the right direction.
 
 See [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for design rationale and what is
 deliberately out of scope.
