@@ -388,7 +388,7 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Ten so far; these are picked because they document
+trade-off → measured validation. Eleven so far; these are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -401,6 +401,7 @@ mistakes rather than successes:
 | [008](docs/decisions/008-a-non-circular-eval-set.md) | The gold labels were sourced from the retriever being graded, and what changed when they were not |
 | [009](docs/decisions/009-what-deploying-taught-that-reading-did-not.md) | Eight deployment failures no amount of reading the config would have caught |
 | [010](docs/decisions/010-the-reranker-works-and-is-not-worth-shipping.md) | The reranker does what it was predicted to do, and still should not ship |
+| [011](docs/decisions/011-failures-that-say-whether-to-retry.md) | Classifying failures by whether retrying helps, and a retry budget that overran the ceiling it cited |
 
 ## License
 

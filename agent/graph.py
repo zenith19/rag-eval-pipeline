@@ -12,8 +12,8 @@ from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from rag.config import BEDROCK_MODEL_ID
 from rag.generate import (
-    BEDROCK_MODEL_ID,
     _bedrock,
     _format_context,
     generate_from_chunks,

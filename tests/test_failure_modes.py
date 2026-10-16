@@ -198,3 +198,30 @@ def test_timeout_budget_fits_inside_the_gateway_ceiling():
     assert worst_case < ceiling_s * 0.8, (
         f"Bedrock budget {worst_case}s leaves too little of the {ceiling_s}s ceiling"
     )
+
+
+def test_model_id_matches_the_one_terraform_grants():
+    """The model the code calls must be the model the IAM policy allows.
+
+    infra/main.tf scopes the execution role's bedrock:InvokeModel to an ARN built
+    from var.bedrock_model_id, and passes the same value as the BEDROCK_MODEL_ID
+    environment variable. While rag/generate.py hardcoded its own copy, that
+    variable was ignored: changing it in Terraform would have granted one model and
+    called another, and Bedrock would answer AccessDenied without naming either.
+
+    Comparing defaults, because that is the pair that drifts — an override sets both
+    at once through the environment.
+    """
+    import re
+    from pathlib import Path
+
+    from rag.config import BEDROCK_MODEL_ID
+
+    tf = (Path(__file__).resolve().parent.parent / "infra" / "variables.tf").read_text()
+    match = re.search(
+        r'variable\s+"bedrock_model_id"\s*\{[^}]*default\s*=\s*"([^"]+)"', tf, re.S
+    )
+    assert match, "no bedrock_model_id default found in infra/variables.tf"
+    assert BEDROCK_MODEL_ID == match.group(1), (
+        f"code calls {BEDROCK_MODEL_ID}, Terraform grants {match.group(1)}"
+    )

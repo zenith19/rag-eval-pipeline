@@ -17,9 +17,10 @@ from pathlib import Path
 import boto3
 from pypdf import PdfReader
 
+from rag.config import AWS_REGION
+
 DATA_DIR = Path("data")
 S3_BUCKET = os.environ.get("RAG_S3_BUCKET")  # if set, read PDFs from S3; otherwise from data/
-S3_REGION = "eu-central-1"
 
 CHUNK_SIZE = 2000      # characters, ~500 tokens
 CHUNK_OVERLAP = 200    # ~10% overlap so context isn't lost at chunk boundaries
@@ -68,7 +69,7 @@ def _read_pdf(source) -> tuple[str, list[tuple[int, int, int]]]:
 def _load_documents() -> list[tuple[str, str, list[tuple[int, int, int]]]]:
     """Return (filename, text, page_spans) per PDF, from S3 if configured else data/."""
     if S3_BUCKET:
-        s3 = boto3.client("s3", region_name=S3_REGION)
+        s3 = boto3.client("s3", region_name=AWS_REGION)
         documents = []
         for obj in s3.list_objects_v2(Bucket=S3_BUCKET).get("Contents", []):
             key = obj["Key"]

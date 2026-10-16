@@ -28,8 +28,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from rag.config import AWS_REGION  # noqa: E402
+
 DEFAULT_BUCKET = os.environ.get("RAG_S3_BUCKET", "zenith-rag-docs-2026")
-REGION = os.environ.get("RAG_S3_REGION", "eu-central-1")
+REGION = os.environ.get("RAG_S3_REGION", AWS_REGION)
 
 
 def normalise(name: str) -> str:

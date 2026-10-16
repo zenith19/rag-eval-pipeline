@@ -5,8 +5,10 @@ from functools import lru_cache
 import boto3
 
 from rag.config import (
+    AWS_REGION,
     BEDROCK_CONNECT_TIMEOUT,
     BEDROCK_MAX_ATTEMPTS,
+    BEDROCK_MODEL_ID,
     BEDROCK_READ_TIMEOUT,
 )
 from rag.errors import (
@@ -16,10 +18,6 @@ from rag.errors import (
 )
 from rag.retriever import DenseRetriever
 from rag.types import Chunk
-
-REGION = "eu-central-1"
-# Frankfurt invokes models through a regional inference profile (the "eu." prefix).
-BEDROCK_MODEL_ID = "eu.amazon.nova-lite-v1:0"
 
 SYSTEM_PROMPT = (
     "Answer the question using only the provided context. "
@@ -53,7 +51,7 @@ def _bedrock():
     # shape for a demo that is idle and then answers one question.
     return boto3.client(
         "bedrock-runtime",
-        region_name=REGION,
+        region_name=AWS_REGION,
         config=Config(
             connect_timeout=BEDROCK_CONNECT_TIMEOUT,
             read_timeout=BEDROCK_READ_TIMEOUT,
