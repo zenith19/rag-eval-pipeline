@@ -15,6 +15,21 @@ COLLECTION = os.environ.get("RAG_COLLECTION", "documents")
 MODEL_NAME = os.environ.get("RAG_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 VECTOR_SIZE = 384  # bge-small-en-v1.5; changing the model means changing this
 
+# Region for Bedrock and S3. Lambda sets AWS_REGION in its runtime environment, so
+# the deployed function follows wherever Terraform put it; locally this falls back
+# to the deploy region.
+AWS_REGION = os.environ.get("AWS_REGION", "eu-central-1")
+
+# Generation model. Terraform passes this as BEDROCK_MODEL_ID (infra/main.tf) AND
+# scopes the execution role's bedrock:InvokeModel to the matching inference-profile
+# ARN. Reading the same variable keeps the grant and the call in step. While this was
+# hardcoded the environment variable was ignored, so changing var.bedrock_model_id
+# would have granted one model and called another — an AccessDenied naming neither.
+#
+# The "eu." prefix makes it a cross-region inference profile and is required in this
+# region; without it Bedrock reports "on-demand throughput isn't supported".
+BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "eu.amazon.nova-lite-v1:0")
+
 # Cross-encoder used by CrossEncoderRetriever. Scores (query, passage) pairs jointly
 # rather than comparing two independent vectors, which is why it can reorder what the
 # bi-encoder ranked badly — and why it costs a forward pass per candidate.
