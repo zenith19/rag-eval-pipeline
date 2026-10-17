@@ -78,3 +78,4 @@ No circuit breaker, no idempotency key, no structured logging. A 503 is observab
 status code: nothing records which error code caused it, how long Bedrock took, or how many
 retries were spent. That is the next milestone, and it is the reason this one stops here — there
 is no `import logging` anywhere in `rag/`, `api/`, `agent/` or `mcp_server/` to build tracing on.
+Addressed in 013.

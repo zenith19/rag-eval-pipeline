@@ -129,5 +129,8 @@ docker run -p 8000:8000 rag-eval-pipeline   # serve from the embedded index, no 
   observation → hypothesis → decision → trade-off → measured validation.
 - Claims about quality come with a measurement. No number in the README that isn't reproducible
   by `evaluation/run_eval.py`.
+- Request-path stages report through `rag.telemetry.note()` / `stage()`, which are no-ops outside
+  a request. Never `print()` from code the MCP server can reach: its protocol runs over stdout,
+  so telemetry logs to stderr.
 - Imports that cost seconds belong inside the function that needs them — `langchain_text_splitters`
   alone costs ~11s and was being paid by the API, which never chunks anything.

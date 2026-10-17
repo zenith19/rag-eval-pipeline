@@ -100,6 +100,43 @@ ECR holds images Terraform did not create, so `destroy` can fail on a non-empty 
 the images first (`.venv/bin/python -m awscli ecr batch-delete-image`) or accept the repository
 lingering at roughly €0.24/month per 2.4 GB image.
 
+## Investigating a failed request
+
+Every request writes one JSON line: request ID, status, `retrieve_ms` / `generate_ms` /
+`total_ms`, whether it paid for a cold start, the chunk IDs retrieved, token counts, Bedrock's own
+latency, retries spent, and on failure the Bedrock error code or the traceback. The same ID comes
+back to the caller as `X-Request-Id`, and on Lambda it is Lambda's own request ID, so it also
+matches the `REPORT` line carrying billed duration and memory.
+
+These run as `rag-deploy`, which already holds `logs:FilterLogEvents`:
+
+```bash
+LOG=/aws/lambda/rag-eval-pipeline
+
+# every server-side failure in the last hour
+.venv/bin/python -m awscli logs filter-log-events --log-group-name "$LOG" \
+  --start-time $(( ($(date +%s) - 3600) * 1000 )) \
+  --filter-pattern '{ $.status >= 500 }' --query 'events[].message' --output text
+
+# one request, from the X-Request-Id a visitor reported
+.venv/bin/python -m awscli logs filter-log-events --log-group-name "$LOG" \
+  --filter-pattern '"<request-id>"' --query 'events[].message' --output text
+```
+
+The second uses a plain-text match rather than `{ $.request_id = … }` on purpose: it also returns
+Lambda's `START`/`END`/`REPORT` lines for the same invocation, which are not JSON.
+
+Reading the line:
+
+| Line says | Means |
+|---|---|
+| `bedrock_error: ThrottlingException`, `retries: 1` | account throttled; both attempts spent; visitor got 503 |
+| `bedrock_error: ReadTimeoutError`, `generate_ms` 12000–14000 | Bedrock slow, not refusing: two 6s reads plus the backoff between them |
+| `bedrock_error: AccessDeniedException`, `generate_ms` small | permission or model access, not load — retrying will not help |
+| `status: 500` with `exception` | retrieval broke; the traceback is in the line |
+| `cold_start: true`, large `retrieve_ms` | this request loaded the embedding model; slow but healthy |
+| `generate_ms` far above `bedrock_latency_ms` | time in the client and network, not in the model |
+
 ## Notes
 
 - `aws` as a console script does not work in this checkout — the path contains a space and a
