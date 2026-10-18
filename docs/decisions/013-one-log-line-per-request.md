@@ -69,6 +69,10 @@ Ten tests in `tests/test_request_logging.py`, replaying each failure mode from
 `tests/test_failure_modes.py` and asserting on the line rather than the status: the throttle names
 `ThrottlingException` and its retry count, a timeout is told apart from a throttle, a permanent
 failure logs at ERROR, an uncaught retrieval failure still gets its line with the traceback.
+Writing that last test found a bug in the first version: the middleware re-raised, Starlette
+answered with a bare `Internal Server Error`, and the header was lost — so the one failure that
+most needs reporting was the one a visitor could not quote. The middleware now returns the 500
+itself, ID in the header and the body.
 Deleting the retry-count `note()` turns exactly the throttle test red.
 
 Two real requests against local Qdrant and Bedrock:

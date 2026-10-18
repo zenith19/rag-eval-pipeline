@@ -64,11 +64,17 @@ async def observe(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         # A retrieval failure is deliberately not caught by ask() — it is a
-        # deployment fault. It still gets its line, with the traceback, before it
-        # becomes Starlette's 500.
+        # deployment fault. It is still a 500, logged at ERROR with the traceback;
+        # what changes is that the visitor gets the ID. Re-raising here handed it to
+        # Starlette, whose bare "Internal Server Error" dropped the header — so the
+        # one failure that most needs reporting was the one that could not be.
         record.update(status=500, total_ms=total_ms())
         telemetry.logger.error("request", extra={"fields": record}, exc_info=True)
-        raise
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal error. Quote request {request_id} when reporting it."},
+            headers={"X-Request-Id": request_id},
+        )
 
     record.update(status=response.status_code, total_ms=total_ms())
     telemetry.logger.log(_level(response.status_code), "request", extra={"fields": record})

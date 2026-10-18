@@ -176,9 +176,13 @@ def test_a_permanent_failure_is_logged_as_an_error(pipeline):
 
 def test_an_uncaught_retrieval_failure_still_gets_its_line_and_traceback(pipeline):
     log = pipeline(retriever=_Retriever(raises=RuntimeError("index missing")))
-    assert _ask(_client()).status_code == 500
+    r = _ask(_client())
+    assert r.status_code == 500
 
     (line,) = log.lines
+    # The failure that most needs reporting must carry the ID that finds it.
+    assert r.headers["X-Request-Id"] == line["request_id"]
+    assert line["request_id"] in r.json()["detail"]
     assert line["status"] == 500 and line["level"] == "ERROR"
     assert "index missing" in line["exception"]
     assert "retrieve_ms" in line

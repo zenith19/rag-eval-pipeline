@@ -8,7 +8,7 @@ throttle or a timeout is usually impossible.
 The shape: the API opens a record when a request arrives, retrieval and generation
 add what they know to it with note(), and the API writes it as one JSON line when
 the response leaves. One line per request rather than one per stage, so a single
-CloudWatch Logs Insights query answers "what happened to request X" without joining.
+CloudWatch filter answers "what happened to request X" without joining.
 
 The stages never receive the record as an argument. It travels in a ContextVar, so
 generate_from_chunks() keeps its return type and every caller outside a request —
@@ -85,9 +85,9 @@ def note(**fields) -> None:
 def stage(name: str):
     """Time a stage into `<name>_ms`, including when it raises.
 
-    A stage that fails is exactly the one whose duration matters: a read timeout
-    and an instant AccessDenied are both 503-or-502, and only the time tells them
-    apart.
+    A stage that fails is exactly the one whose duration matters: the error code
+    says what went wrong, and the time says how much of the gateway's 30s budget
+    the failure consumed before anyone was told.
     """
     began = time.perf_counter()
     try:
