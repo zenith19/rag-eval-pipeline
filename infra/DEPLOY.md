@@ -120,18 +120,20 @@ latency, retries spent, and on failure the Bedrock error code or the traceback. 
 back to the caller as `X-Request-Id`, and on Lambda it is Lambda's own request ID, so it also
 matches the `REPORT` line carrying billed duration and memory.
 
-These run as `rag-deploy`, which already holds `logs:FilterLogEvents`:
+These run as `rag-deploy`, which already holds `logs:FilterLogEvents`. `--region` is not
+optional: that profile has no default region, and without it every command fails before
+reaching AWS.
 
 ```bash
 LOG=/aws/lambda/rag-eval-pipeline
 
 # every server-side failure in the last hour
-.venv/bin/python -m awscli logs filter-log-events --log-group-name "$LOG" \
+.venv/bin/python -m awscli logs filter-log-events --region eu-central-1 --log-group-name "$LOG" \
   --start-time $(( ($(date +%s) - 3600) * 1000 )) \
   --filter-pattern '{ $.status >= 500 }' --query 'events[].message' --output text
 
 # one request, from the X-Request-Id a visitor reported
-.venv/bin/python -m awscli logs filter-log-events --log-group-name "$LOG" \
+.venv/bin/python -m awscli logs filter-log-events --region eu-central-1 --log-group-name "$LOG" \
   --filter-pattern '"<request-id>"' --query 'events[].message' --output text
 ```
 

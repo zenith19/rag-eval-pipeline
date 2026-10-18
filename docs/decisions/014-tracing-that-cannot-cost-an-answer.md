@@ -88,6 +88,24 @@ Flush, measured from a laptop in Bielefeld: **234ms** for the first (connection 
 
 Per-question cost across the three: **$0.00018–0.00023**, about $1 per 5,000 questions.
 
-Not yet verified: the flush from Lambda in `eu-central-1`, and that the function's role can
-decrypt the SecureStrings under the AWS-managed key on this account — which has already shown one
-class of resource policy going unenforced (009). Both wait for the deploy.
+### Deployed
+
+Deployed as `e97e623`, the first deploy since `9effa5d`, so it shipped 013's logging as well.
+Four questions against the live URL, then checked from both ends:
+
+- **Keys decrypted.** No `tracing_disabled` line. This account had already shown one class of
+  resource policy going unenforced (009), so the AWS-managed key's policy was not assumed to work;
+  it does.
+- **Flush from Lambda: 57–115ms**, every one `flushed: true`. A request with nothing queued
+  flushes in 0.2ms.
+- **All four traces arrived**, fetched back from Langfuse by the ID derived from each Lambda
+  request ID, with all three observations and a cost of $0.00015–0.00023.
+- **One ID finds everything.** Filtering CloudWatch on one request ID returns Lambda's `START`,
+  the request line, the flush line, `END`, and `REPORT` (955ms billed, 1,001 of 3,008 MB used).
+
+Running those queries found a documentation bug: `rag-deploy` has no default region, so every
+command as first written in `infra/DEPLOY.md` failed before reaching AWS. Fixed.
+
+The traces earned their keep on the first four requests. Two answers were *"I don't know."* and
+*"You don't know."* — to two of the three example questions on the demo page. The log line could
+only have said the call succeeded; the trace shows what the model was given and why it declined.
