@@ -268,3 +268,15 @@ def test_an_unknown_price_is_none_not_zero(monkeypatch, model, tokens, expected)
 
     monkeypatch.setattr(gen, "BEDROCK_MODEL_ID", model)
     assert gen.estimated_cost_usd(*tokens) == expected
+
+
+def test_only_questions_are_traced_not_page_loads(traced):
+    """The demo page and health checks would otherwise bury every question."""
+    from api.main import app
+
+    install, spans, _ = traced
+    install()
+    client = TestClient(app)
+    client.get("/")
+    client.get("/health")
+    assert spans() == {}

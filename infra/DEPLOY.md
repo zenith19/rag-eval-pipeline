@@ -50,6 +50,18 @@ correct in the file.
      "import boto3; print(boto3.client('sts').get_caller_identity()['Arn'].split('/')[-1])"
    # expect: rag-deploy
    ```
+5. **Store the Langfuse keys** (optional — without them the function runs untraced). In the
+   console, Systems Manager → Parameter Store → Create parameter, twice:
+
+   | Name | Type | Value |
+   |---|---|---|
+   | `/rag-eval-pipeline/langfuse/public_key` | SecureString, KMS key `alias/aws/ssm` | `pk-lf-…` |
+   | `/rag-eval-pipeline/langfuse/secret_key` | SecureString, KMS key `alias/aws/ssm` | `sk-lf-…` |
+
+   The console rather than the CLI, so the secret never enters shell history, and by hand
+   rather than in Terraform, so it never enters the state file. `rag-deploy` cannot write
+   Parameter Store, and the function's role can read only these two names. If they are missing
+   or unreadable, the function logs `tracing_disabled` with the reason and serves untraced.
 
 ## Deploying
 
@@ -136,6 +148,18 @@ Reading the line:
 | `status: 500` with `exception` | retrieval broke; the traceback is in the line |
 | `cold_start: true`, large `retrieve_ms` | this request loaded the embedding model; slow but healthy |
 | `generate_ms` far above `bedrock_latency_ms` | time in the client and network, not in the model |
+
+For what the model was actually shown — the passages, the prompt, the answer — open the trace in
+Langfuse. Its ID is derived from the request ID, so it needs no lookup:
+
+```bash
+.venv/bin/python -c "from langfuse import Langfuse; print(Langfuse.create_trace_id(seed='<request-id>'))"
+# then https://cloud.langfuse.com/project/<project-id>/traces/<that id>
+```
+
+A `trace_flush` line follows each request: `flushed: false` means Langfuse did not accept the
+trace within `RAG_TRACE_FLUSH_TIMEOUT` and that request's trace may be missing. The answer was
+unaffected.
 
 ## Notes
 

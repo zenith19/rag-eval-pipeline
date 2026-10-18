@@ -5,6 +5,7 @@ import os
 import time
 import uuid
 from collections import defaultdict, deque
+from contextlib import nullcontext
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -63,7 +64,10 @@ async def observe(request: Request, call_next):
     try:
         # The trace's root opens here, so retrieval and generation nest under it;
         # its ID is derived from request_id, which is what joins the two records.
-        with tracing.request(request_id, path=request.url.path) as root:
+        # Only /ask: a page load or a health check has nothing to show, and tracing
+        # one would spend quota to bury the questions under empty traces.
+        traced = tracing.request(request_id) if request.url.path == "/ask" else nullcontext(tracing.OFF)
+        with traced as root:
             response = await call_next(request)
             root.update(
                 metadata={"status": response.status_code},

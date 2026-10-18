@@ -34,8 +34,8 @@ class _Off:
         pass
 
 
-_OFF = _Off()
-_root: ContextVar = ContextVar("rag_trace_root", default=_OFF)
+OFF = _Off()
+_root: ContextVar = ContextVar("rag_trace_root", default=OFF)
 
 
 def _keys_from_ssm(prefix: str) -> tuple[str, str]:
@@ -77,7 +77,7 @@ def request(request_id: str, **metadata):
     """Open the root observation for one request, with a trace ID derived from its ID."""
     lf = client()
     if lf is None:
-        yield _OFF
+        yield OFF
         return
     trace_id = lf.create_trace_id(seed=request_id)
     with lf.start_as_current_observation(
@@ -109,7 +109,7 @@ def observation(name: str, as_type: str = "span", **fields):
     """
     lf = client()
     if lf is None:
-        yield _OFF
+        yield OFF
         return
     with lf.start_as_current_observation(name=name, as_type=as_type, **fields) as obs:
         try:

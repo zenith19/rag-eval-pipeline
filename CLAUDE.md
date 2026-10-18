@@ -129,6 +129,9 @@ docker run -p 8000:8000 rag-eval-pipeline   # serve from the embedded index, no 
   observation → hypothesis → decision → trade-off → measured validation.
 - Claims about quality come with a measurement. No number in the README that isn't reproducible
   by `evaluation/run_eval.py`.
+- Tracing (`rag/tracing.py`) is off unless `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` are set
+  (locally: `.claude/settings.local.json` → `env`) or `LANGFUSE_SSM_PREFIX` points at Parameter
+  Store (deployed). Never paste Langfuse keys into chat, code or Terraform.
 - Request-path stages report through `rag.telemetry.note()` / `stage()`, which are no-ops outside
   a request. Never `print()` from code the MCP server can reach: its protocol runs over stdout,
   so telemetry logs to stderr.

@@ -222,6 +222,13 @@ and the Bedrock error code or traceback when it fails — keyed by the `X-Reques
 the caller. A failure is diagnosed from the line rather than by reproducing it, which for a
 throttle or a timeout is usually impossible; `infra/DEPLOY.md` has the queries.
 
+Each question is also traced in Langfuse: the passages retrieval returned, the exact prompt, the
+answer, tokens and cost, on one timeline. The trace ID is derived from the request ID, so the
+same `X-Request-Id` finds both. Cost is estimated at AWS's list price for `eu-central-1` —
+**about $0.0002 per question** (~2,500 input tokens) — and computed once, so the log line and the
+trace cannot disagree. Tracing is off without keys, and a slow Langfuse costs a trace, never an
+answer: the flush before Lambda freezes is capped at 1s and counted in the gateway budget test.
+
 ## Tech stack
 
 - **Embeddings:** sentence-transformers (`BAAI/bge-small-en-v1.5`), runs on CPU
@@ -418,7 +425,7 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Thirteen so far; these are picked because they document
+trade-off → measured validation. Fourteen so far; these are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -434,6 +441,7 @@ mistakes rather than successes:
 | [011](docs/decisions/011-failures-that-say-whether-to-retry.md) | Classifying failures by whether retrying helps, and a retry budget that overran the ceiling it cited |
 | [012](docs/decisions/012-the-judge-detects-falsehood-not-unsupportedness.md) | An LLM faithfulness judge that scored below a constant classifier, and what it was actually measuring |
 | [013](docs/decisions/013-one-log-line-per-request.md) | A 503 that could not say why: one structured line per request, before any tracing |
+| [014](docs/decisions/014-tracing-that-cannot-cost-an-answer.md) | Langfuse on Lambda: a flush the visitor waits for, capped and counted against the same 30s |
 
 ## License
 
