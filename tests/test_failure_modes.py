@@ -183,6 +183,7 @@ def test_timeout_budget_fits_inside_the_gateway_ceiling():
         BEDROCK_CONNECT_TIMEOUT,
         BEDROCK_MAX_ATTEMPTS,
         BEDROCK_READ_TIMEOUT,
+        TRACE_FLUSH_TIMEOUT,
     )
 
     tf = (Path(__file__).resolve().parent.parent / "infra" / "main.tf").read_text()
@@ -192,11 +193,15 @@ def test_timeout_budget_fits_inside_the_gateway_ceiling():
 
     # botocore "standard" mode: full-jitter exponential backoff, capped at 20s
     backoff = sum(min(2**i, 20) for i in range(1, BEDROCK_MAX_ATTEMPTS))
-    worst_case = BEDROCK_CONNECT_TIMEOUT + BEDROCK_READ_TIMEOUT * BEDROCK_MAX_ATTEMPTS + backoff
+    bedrock = BEDROCK_CONNECT_TIMEOUT + BEDROCK_READ_TIMEOUT * BEDROCK_MAX_ATTEMPTS + backoff
+    # The trace flush runs after the answer is built and before Lambda returns, so the
+    # visitor waits through it too. Left out, a slow Langfuse could push a request that
+    # Bedrock answered in time past the gateway — the 011 bug again, in a new place.
+    worst_case = bedrock + TRACE_FLUSH_TIMEOUT
 
     # Strictly less, with room for retrieval and request overhead on the same clock.
     assert worst_case < ceiling_s * 0.8, (
-        f"Bedrock budget {worst_case}s leaves too little of the {ceiling_s}s ceiling"
+        f"Bedrock + flush budget {worst_case}s leaves too little of the {ceiling_s}s ceiling"
     )
 
 

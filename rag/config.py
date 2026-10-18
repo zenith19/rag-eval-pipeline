@@ -58,6 +58,31 @@ BEDROCK_CONNECT_TIMEOUT = float(os.environ.get("RAG_BEDROCK_CONNECT_TIMEOUT", "2
 BEDROCK_READ_TIMEOUT = float(os.environ.get("RAG_BEDROCK_READ_TIMEOUT", "6"))
 BEDROCK_MAX_ATTEMPTS = int(os.environ.get("RAG_BEDROCK_MAX_ATTEMPTS", "2"))
 
+# USD per 1,000 tokens (input, output), for the cost estimate on each request.
+# Source: the AWS Price List API, AmazonBedrock offer for eu-central-1, usage types
+# EUC1-NovaLite-input-tokens and EUC1-NovaLite-output-tokens, read 2026-10-19.
+# Third-party trackers quoted three different input prices; this is the one AWS bills.
+#
+# Keyed by model ID on purpose: a model without an entry gets no estimate rather than
+# a wrong one, so changing BEDROCK_MODEL_ID cannot silently keep reporting Nova Lite's
+# price. The "eu." profile may serve from another EU region; that region's rate is
+# not checked here, which is why this is called an estimate.
+BEDROCK_PRICE_PER_1K = {
+    "eu.amazon.nova-lite-v1:0": (0.000078, 0.000312),
+}
+
+# Langfuse tracing is off unless keys are present: LANGFUSE_PUBLIC_KEY and
+# LANGFUSE_SECRET_KEY directly (local), or LANGFUSE_SSM_PREFIX naming where they live
+# in SSM Parameter Store (deployed). The deployed keys are never in the environment,
+# Terraform state or this repository — the function reads them once, at cold start.
+LANGFUSE_SSM_PREFIX = os.environ.get("LANGFUSE_SSM_PREFIX")
+
+# How long a request may wait for its trace to leave before Lambda freezes the
+# process. Counted in the gateway budget (tests/test_failure_modes.py): a slow
+# Langfuse must cost a trace, never a visitor's answer. The SDK's own export timeout
+# is 5s, which on a 30s ceiling is not a number to inherit by default.
+TRACE_FLUSH_TIMEOUT = float(os.environ.get("RAG_TRACE_FLUSH_TIMEOUT", "1"))
+
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "6333"))
 

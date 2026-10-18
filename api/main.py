@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from rag import telemetry
+from rag import telemetry, tracing
 from rag.errors import PermanentGenerationError, TransientGenerationError
 from rag.generate import answer_question
 
@@ -61,7 +61,18 @@ async def observe(request: Request, call_next):
         return round((time.perf_counter() - began) * 1000, 1)
 
     try:
-        response = await call_next(request)
+        # The trace's root opens here, so retrieval and generation nest under it;
+        # its ID is derived from request_id, which is what joins the two records.
+        with tracing.request(request_id, path=request.url.path) as root:
+            response = await call_next(request)
+            root.update(
+                metadata={"status": response.status_code},
+                # The same severity the log line gets, so filtering traces by level
+                # and filtering logs by level find the same requests.
+                level={"ERROR": "ERROR", "WARNING": "WARNING"}.get(
+                    logging.getLevelName(_level(response.status_code)), "DEFAULT"
+                ),
+            )
     except Exception:
         # A retrieval failure is deliberately not caught by ask() — it is a
         # deployment fault. It is still a 500, logged at ERROR with the traceback;
@@ -129,6 +140,7 @@ def ask(request: AskRequest) -> AskResponse:
     # The address would identify a person and diagnoses nothing the rate limiter
     # does not already handle.
     telemetry.note(question=request.question)
+    tracing.annotate(input=request.question)
     try:
         answer, chunks = answer_question(request.question, request.k)
     except TransientGenerationError as exc:
@@ -144,6 +156,7 @@ def ask(request: AskRequest) -> AskResponse:
             detail=f"{exc} Retrying will not help; this needs fixing on the server.",
         ) from exc
 
+    tracing.annotate(output=answer)
     return AskResponse(
         answer=answer,
         sources=[
