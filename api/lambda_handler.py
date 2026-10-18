@@ -36,6 +36,9 @@ def handler(event, context):
         from rag.generate import retrieve_chunks
 
         retrieve_chunks("warm", k=1)
+        # Build the tracing client here too: fetching its keys and importing
+        # langfuse (~0.8s) then happen on the schedule's clock, not a visitor's.
+        tracing.client()
         return {"warmed": True}
 
     try:

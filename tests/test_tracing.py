@@ -280,3 +280,35 @@ def test_only_questions_are_traced_not_page_loads(traced):
     client.get("/")
     client.get("/health")
     assert spans() == {}
+
+
+def test_the_warm_ping_builds_the_tracing_client_off_the_visitors_clock(monkeypatch):
+    import api.lambda_handler as lh
+    import rag.generate as gen
+
+    built = []
+    monkeypatch.setattr(gen, "retrieve_chunks", lambda q, k: [])
+    monkeypatch.setattr(tracing, "client", lambda: built.append(1))
+    assert lh.handler({"warm": True}, None) == {"warmed": True}
+    assert built == [1]
+
+
+def test_the_parameter_store_call_is_bounded(monkeypatch):
+    """Unbounded, boto3 would wait 60s + 60s with retries inside a 30s gateway."""
+    import boto3
+
+    seen = {}
+
+    class _SSM:
+        def get_parameters(self, Names, WithDecryption):
+            return {"Parameters": [{"Name": n, "Value": "v"} for n in Names]}
+
+    def _client(service, region_name, config):
+        seen["config"] = config
+        return _SSM()
+
+    monkeypatch.setattr(boto3, "client", _client)
+    assert tracing._keys_from_ssm("/p") == ("v", "v")
+    cfg = seen["config"]
+    worst = (cfg.connect_timeout + cfg.read_timeout) * cfg.retries["max_attempts"]
+    assert worst <= 10

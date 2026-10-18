@@ -39,10 +39,19 @@ _root: ContextVar = ContextVar("rag_trace_root", default=OFF)
 
 
 def _keys_from_ssm(prefix: str) -> tuple[str, str]:
-    import boto3
+    """Fetch the keys from Parameter Store, bounded.
 
+    The first /ask on a container that was not warmed pays for this, on the
+    gateway's 30s clock. boto3's defaults are 60s connect plus 60s read, with
+    retries — a hanging Parameter Store would take the answer down with the trace.
+    Bounded here, it can cost at most a few seconds and then turns tracing off.
+    """
+    import boto3
+    from botocore.config import Config
+
+    bounded = Config(connect_timeout=2, read_timeout=2, retries={"max_attempts": 2})
     names = [f"{prefix}/public_key", f"{prefix}/secret_key"]
-    found = boto3.client("ssm", region_name=AWS_REGION).get_parameters(
+    found = boto3.client("ssm", region_name=AWS_REGION, config=bounded).get_parameters(
         Names=names, WithDecryption=True
     )
     values = {p["Name"]: p["Value"] for p in found["Parameters"]}

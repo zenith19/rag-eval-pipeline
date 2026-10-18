@@ -54,8 +54,12 @@ in `rag/config.py` and **counted in the gateway budget test**, which now reads
   console), not Terraform variables (written to the state file). The function's role may read
   exactly two parameter names, once per cold start. If that fails, it logs `tracing_disabled`
   with the reason and serves untraced — a test asserts the service survives it.
-- **Cold-start cost.** Importing `langfuse` takes ~0.8s, plus one Parameter Store call. Paid once
-  per container, on a cold start already measured in tens of seconds.
+- **Cold-start cost, moved off the visitor.** Importing `langfuse` takes ~0.8s, plus one Parameter
+  Store call. The warm-up ping now builds the client, so on the warmed container neither lands on
+  a visitor. Review of this PR found the Parameter Store call had no timeout at all — boto3's
+  defaults are 60s connect plus 60s read, with retries — so on an unwarmed container a hanging
+  Parameter Store would have taken the answer down with the trace. It is now bounded at
+  (2 + 2) × 2 = 8s worst case, with a test, and failure turns tracing off.
 - **Cost is an estimate.** Nova Lite's list price in `eu-central-1`, from the AWS Price List API:
   $0.078 / 1M input, $0.312 / 1M output. Three third-party trackers gave three different input
   prices; this is the one AWS bills in Frankfurt. The `eu.` inference profile may serve from
@@ -64,7 +68,7 @@ in `rag/config.py` and **counted in the gateway budget test**, which now reads
 
 ## Measured validation
 
-Thirteen test cases in `tests/test_tracing.py` against a **real** Langfuse client exporting to memory,
+Fifteen test cases in `tests/test_tracing.py` against a **real** Langfuse client exporting to memory,
 so the assertions are on the spans Langfuse would receive. Two deliberate breakages — not marking
 a failed root as ERROR, not attaching cost to the generation — each turn exactly one test red.
 
