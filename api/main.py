@@ -1,16 +1,20 @@
 """FastAPI service exposing the RAG pipeline."""
 
+import logging
 import os
 import time
+import uuid
 from collections import defaultdict, deque
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from rag import telemetry
 from rag.errors import PermanentGenerationError, TransientGenerationError
 from rag.generate import answer_question
 
+telemetry.configure_logging()
 app = FastAPI(title="RAG Evaluation Pipeline")
 
 # Per-IP limit. Best-effort and deliberately so: the window lives in process
@@ -40,6 +44,54 @@ async def rate_limit(request: Request, call_next):
         )
     window.append(now)
     return await call_next(request)
+
+
+# Registered after rate_limit, so it wraps it: a 429 is logged like anything else.
+@app.middleware("http")
+async def observe(request: Request, call_next):
+    # Lambda's own request ID when there is one, so this line joins the REPORT line
+    # Lambda writes for the same invocation — billed duration, memory, init time.
+    # Locally there is no Lambda context, and a random ID serves the same purpose.
+    context = request.scope.get("aws.context")
+    request_id = getattr(context, "aws_request_id", None) or uuid.uuid4().hex
+    record = telemetry.start(request_id=request_id, method=request.method, path=request.url.path)
+    began = time.perf_counter()
+
+    def total_ms() -> float:
+        return round((time.perf_counter() - began) * 1000, 1)
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        # A retrieval failure is deliberately not caught by ask() — it is a
+        # deployment fault. It is still a 500, logged at ERROR with the traceback;
+        # what changes is that the visitor gets the ID. Re-raising here handed it to
+        # Starlette, whose bare "Internal Server Error" dropped the header — so the
+        # one failure that most needs reporting was the one that could not be.
+        record.update(status=500, total_ms=total_ms())
+        telemetry.logger.error("request", extra={"fields": record}, exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal error. Quote request {request_id} when reporting it."},
+            headers={"X-Request-Id": request_id},
+        )
+
+    record.update(status=response.status_code, total_ms=total_ms())
+    telemetry.logger.log(_level(response.status_code), "request", extra={"fields": record})
+    # Returned to the caller, so "it failed" can arrive with the one string that
+    # finds the line.
+    response.headers["X-Request-Id"] = request_id
+    return response
+
+
+def _level(status: int) -> int:
+    # 503 is the service working as designed under throttling: worth seeing, not
+    # worth paging about. 502 and 500 mean something is broken.
+    if status >= 500 and status != 503:
+        return logging.ERROR
+    if status in (429, 503):
+        return logging.WARNING
+    return logging.INFO
 
 
 class AskRequest(BaseModel):
@@ -72,6 +124,11 @@ def ask(request: AskRequest) -> AskResponse:
     # instead of an error box. Retrieval failures are deliberately NOT caught: a
     # broken index is a deployment fault, and masking it would hide the one thing
     # worth paging about.
+    # The question is logged; the client address is not. The question is what makes
+    # a bad answer diagnosable, and this is a public demo over published papers.
+    # The address would identify a person and diagnoses nothing the rate limiter
+    # does not already handle.
+    telemetry.note(question=request.question)
     try:
         answer, chunks = answer_question(request.question, request.k)
     except TransientGenerationError as exc:

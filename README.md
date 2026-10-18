@@ -217,6 +217,11 @@ context is an invitation to invent one. Retrieval failures are deliberately *not
 broken index is a deployment fault, and masking it would hide the one thing worth paging about.
 Each path is covered by fault injection in `tests/test_failure_modes.py`, with no AWS involved.
 
+Each request also leaves one JSON log line — stage timings, retrieved chunk IDs, tokens, retries,
+and the Bedrock error code or traceback when it fails — keyed by the `X-Request-Id` returned to
+the caller. A failure is diagnosed from the line rather than by reproducing it, which for a
+throttle or a timeout is usually impossible; `infra/DEPLOY.md` has the queries.
+
 ## Tech stack
 
 - **Embeddings:** sentence-transformers (`BAAI/bge-small-en-v1.5`), runs on CPU
@@ -413,7 +418,7 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Twelve so far; these are picked because they document
+trade-off → measured validation. Thirteen so far; these are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -428,6 +433,7 @@ mistakes rather than successes:
 | [010](docs/decisions/010-the-reranker-works-and-is-not-worth-shipping.md) | The reranker does what it was predicted to do, and still should not ship |
 | [011](docs/decisions/011-failures-that-say-whether-to-retry.md) | Classifying failures by whether retrying helps, and a retry budget that overran the ceiling it cited |
 | [012](docs/decisions/012-the-judge-detects-falsehood-not-unsupportedness.md) | An LLM faithfulness judge that scored below a constant classifier, and what it was actually measuring |
+| [013](docs/decisions/013-one-log-line-per-request.md) | A 503 that could not say why: one structured line per request, before any tracing |
 
 ## License
 

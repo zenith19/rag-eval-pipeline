@@ -17,6 +17,7 @@ from rag.errors import (
     TransientGenerationError,
 )
 from rag.retriever import DenseRetriever
+from rag.telemetry import note, stage
 from rag.types import Chunk
 
 SYSTEM_PROMPT = (
@@ -70,7 +71,20 @@ def retrieve_chunks(question: str, k: int = 3) -> list[Chunk]:
     Goes through the same DenseRetriever the eval harness scores, so a retrieval
     improvement measured offline reaches this path by construction.
     """
-    return _retriever().retrieve_chunks(question, k)
+    # Whether THIS request paid for loading the embedding model. A 20s retrieval is
+    # a cold start if this is true and a fault if it is not; the latency alone
+    # cannot say which.
+    note(cold_start=_retriever.cache_info().currsize == 0)
+    with stage("retrieve"):
+        chunks = _retriever().retrieve_chunks(question, k)
+    # IDs and scores, not text: enough to look up exactly what the model was shown,
+    # without copying the corpus into the logs on every request.
+    note(
+        k=k,
+        chunk_ids=[c.chunk_id for c in chunks],
+        top_score=round(chunks[0].score, 3) if chunks else None,
+    )
+    return chunks
 
 
 def generate_from_chunks(question: str, chunks: list[Chunk]) -> str:
@@ -81,29 +95,36 @@ def generate_from_chunks(question: str, chunks: list[Chunk]) -> str:
     without importing AWS vocabulary to interpret it.
     """
     if not chunks:
+        note(outcome="no_evidence")
         return NO_EVIDENCE_ANSWER
 
     from botocore.exceptions import BotoCoreError, ClientError
 
+    note(model_id=BEDROCK_MODEL_ID)
     try:
-        response = _bedrock().converse(
-            modelId=BEDROCK_MODEL_ID,
-            system=[{"text": SYSTEM_PROMPT}],
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "text": f"Context:\n{_format_context(chunks)}"
-                            f"\n\nQuestion: {question}"
-                        }
-                    ],
-                }
-            ],
-            inferenceConfig={"maxTokens": 512, "temperature": 0.2},
-        )
+        with stage("generate"):
+            response = _bedrock().converse(
+                modelId=BEDROCK_MODEL_ID,
+                system=[{"text": SYSTEM_PROMPT}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "text": f"Context:\n{_format_context(chunks)}"
+                                f"\n\nQuestion: {question}"
+                            }
+                        ],
+                    }
+                ],
+                inferenceConfig={"maxTokens": 512, "temperature": 0.2},
+            )
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
+        note(
+            bedrock_error=code,
+            retries=exc.response.get("ResponseMetadata", {}).get("RetryAttempts"),
+        )
         # botocore has already retried the retryable ones to exhaustion by here;
         # the distinction still matters, because it tells the caller whether
         # trying again LATER is worth anything.
@@ -112,8 +133,19 @@ def generate_from_chunks(question: str, chunks: list[Chunk]) -> str:
         raise PermanentGenerationError(f"Bedrock rejected the request ({code})") from exc
     except BotoCoreError as exc:
         # Connect and read timeouts land here, not in ClientError: no HTTP response
-        # came back to carry an error code.
+        # came back to carry an error code, nor a retry count.
+        note(bedrock_error=type(exc).__name__)
         raise TransientGenerationError(f"Bedrock did not respond ({type(exc).__name__})") from exc
+
+    usage = response.get("usage", {})
+    note(
+        input_tokens=usage.get("inputTokens"),
+        output_tokens=usage.get("outputTokens"),
+        # Bedrock's own figure, beside generate_ms: the gap between them is time
+        # spent in the network and the client, not in the model.
+        bedrock_latency_ms=response.get("metrics", {}).get("latencyMs"),
+        retries=response.get("ResponseMetadata", {}).get("RetryAttempts"),
+    )
 
     try:
         return response["output"]["message"]["content"][0]["text"]
