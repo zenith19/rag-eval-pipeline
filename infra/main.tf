@@ -22,7 +22,8 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 locals {
-  name = "rag-eval-pipeline"
+  name                = "rag-eval-pipeline"
+  langfuse_ssm_prefix = "/${local.name}/langfuse"
 }
 
 # ----------------------------------------------------------------- ECR ------
@@ -122,6 +123,24 @@ resource "aws_iam_role_policy" "bedrock" {
   })
 }
 
+# Read the two Langfuse keys, and nothing else in Parameter Store. They are created
+# by hand (infra/DEPLOY.md), not by Terraform: a secret Terraform writes is a secret
+# in its state file. No kms:Decrypt here — SecureStrings under the AWS-managed
+# aws/ssm key are decrypted on the caller's behalf by Parameter Store itself.
+resource "aws_iam_role_policy" "langfuse_keys" {
+  name = "${local.name}-langfuse-keys"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ssm:GetParameters"]
+      Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.langfuse_ssm_prefix}/*"
+    }]
+  })
+}
+
 # -------------------------------------------------------------- Lambda ------
 
 resource "aws_cloudwatch_log_group" "lambda" {
@@ -169,6 +188,8 @@ resource "aws_lambda_function" "app" {
       HF_HOME            = "/opt/hf"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       RATE_LIMIT_PER_MIN = tostring(var.rate_limit_per_min)
+      # A path, not a key: the function fetches the keys from here at cold start.
+      LANGFUSE_SSM_PREFIX = local.langfuse_ssm_prefix
     }
   }
 

@@ -4,11 +4,13 @@ from functools import lru_cache
 
 import boto3
 
+from rag import tracing
 from rag.config import (
     AWS_REGION,
     BEDROCK_CONNECT_TIMEOUT,
     BEDROCK_MAX_ATTEMPTS,
     BEDROCK_MODEL_ID,
+    BEDROCK_PRICE_PER_1K,
     BEDROCK_READ_TIMEOUT,
 )
 from rag.errors import (
@@ -75,8 +77,19 @@ def retrieve_chunks(question: str, k: int = 3) -> list[Chunk]:
     # a cold start if this is true and a fault if it is not; the latency alone
     # cannot say which.
     note(cold_start=_retriever.cache_info().currsize == 0)
-    with stage("retrieve"):
+    with stage("retrieve"), tracing.observation(
+        "retrieve", as_type="retriever", input={"question": question, "k": k}
+    ) as span:
         chunks = _retriever().retrieve_chunks(question, k)
+        # The trace gets the text, the log line does not: the trace is where someone
+        # goes to read what the model was shown.
+        span.update(
+            output=[
+                {"chunk_id": c.chunk_id, "citation": c.cite(), "score": round(c.score, 3),
+                 "text": c.text}
+                for c in chunks
+            ]
+        )
     # IDs and scores, not text: enough to look up exactly what the model was shown,
     # without copying the corpus into the logs on every request.
     note(
@@ -85,6 +98,19 @@ def retrieve_chunks(question: str, k: int = 3) -> list[Chunk]:
         top_score=round(chunks[0].score, 3) if chunks else None,
     )
     return chunks
+
+
+def estimated_cost_usd(input_tokens: int | None, output_tokens: int | None) -> float | None:
+    """Cost of one call at the listed on-demand rate, or None if it cannot be known.
+
+    None rather than 0 for an unpriced model or missing usage: an estimate of zero is
+    a claim, and a wrong one.
+    """
+    price = BEDROCK_PRICE_PER_1K.get(BEDROCK_MODEL_ID)
+    if price is None or input_tokens is None or output_tokens is None:
+        return None
+    per_in, per_out = price
+    return round(input_tokens / 1000 * per_in + output_tokens / 1000 * per_out, 8)
 
 
 def generate_from_chunks(question: str, chunks: list[Chunk]) -> str:
@@ -100,24 +126,50 @@ def generate_from_chunks(question: str, chunks: list[Chunk]) -> str:
 
     from botocore.exceptions import BotoCoreError, ClientError
 
+    prompt = f"Context:\n{_format_context(chunks)}\n\nQuestion: {question}"
+    params = {"maxTokens": 512, "temperature": 0.2}
     note(model_id=BEDROCK_MODEL_ID)
     try:
-        with stage("generate"):
+        with stage("generate"), tracing.observation(
+            "generate",
+            as_type="generation",
+            model=BEDROCK_MODEL_ID,
+            model_parameters=params,
+            input=[{"role": "system", "content": SYSTEM_PROMPT},
+                   {"role": "user", "content": prompt}],
+        ) as generation:
             response = _bedrock().converse(
                 modelId=BEDROCK_MODEL_ID,
                 system=[{"text": SYSTEM_PROMPT}],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "text": f"Context:\n{_format_context(chunks)}"
-                                f"\n\nQuestion: {question}"
-                            }
-                        ],
-                    }
-                ],
-                inferenceConfig={"maxTokens": 512, "temperature": 0.2},
+                messages=[{"role": "user", "content": [{"text": prompt}]}],
+                inferenceConfig=params,
+            )
+            usage = response.get("usage", {})
+            tokens_in, tokens_out = usage.get("inputTokens"), usage.get("outputTokens")
+            cost = estimated_cost_usd(tokens_in, tokens_out)
+            note(
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+                estimated_cost_usd=cost,
+                # Bedrock's own figure, beside generate_ms: the gap between them is time
+                # spent in the network and the client, not in the model.
+                bedrock_latency_ms=response.get("metrics", {}).get("latencyMs"),
+                retries=response.get("ResponseMetadata", {}).get("RetryAttempts"),
+            )
+            try:
+                answer = response["output"]["message"]["content"][0]["text"]
+            except (KeyError, IndexError) as exc:
+                # A 200 whose shape is wrong is not retryable: the same request would
+                # produce the same unusable body.
+                raise PermanentGenerationError(
+                    "Bedrock returned an unexpected response shape"
+                ) from exc
+            # Cost is passed explicitly rather than left to Langfuse's price table,
+            # so the trace and the log line cannot disagree about what a call cost.
+            generation.update(
+                output=answer,
+                usage_details={"input": tokens_in or 0, "output": tokens_out or 0},
+                **({"cost_details": {"total": cost}} if cost is not None else {}),
             )
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
@@ -137,22 +189,7 @@ def generate_from_chunks(question: str, chunks: list[Chunk]) -> str:
         note(bedrock_error=type(exc).__name__)
         raise TransientGenerationError(f"Bedrock did not respond ({type(exc).__name__})") from exc
 
-    usage = response.get("usage", {})
-    note(
-        input_tokens=usage.get("inputTokens"),
-        output_tokens=usage.get("outputTokens"),
-        # Bedrock's own figure, beside generate_ms: the gap between them is time
-        # spent in the network and the client, not in the model.
-        bedrock_latency_ms=response.get("metrics", {}).get("latencyMs"),
-        retries=response.get("ResponseMetadata", {}).get("RetryAttempts"),
-    )
-
-    try:
-        return response["output"]["message"]["content"][0]["text"]
-    except (KeyError, IndexError) as exc:
-        # A 200 whose shape is wrong is not retryable: the same request would
-        # produce the same unusable body.
-        raise PermanentGenerationError("Bedrock returned an unexpected response shape") from exc
+    return answer
 
 
 def answer_question(question: str, k: int = 3) -> tuple[str, list[Chunk]]:

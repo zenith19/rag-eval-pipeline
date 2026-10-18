@@ -12,6 +12,7 @@ rather than in a shell entrypoint (docs/decisions/006).
 from mangum import Mangum
 
 from api.main import app
+from rag import telemetry, tracing
 
 _asgi = Mangum(app, lifespan="off")
 
@@ -35,6 +36,20 @@ def handler(event, context):
         from rag.generate import retrieve_chunks
 
         retrieve_chunks("warm", k=1)
+        # Build the tracing client here too: fetching its keys and importing
+        # langfuse (~0.8s) then happen on the schedule's clock, not a visitor's.
+        tracing.client()
         return {"warmed": True}
 
-    return _asgi(event, context)
+    try:
+        return _asgi(event, context)
+    finally:
+        # After the response is built and before Lambda freezes the process, which
+        # is the only window in which a queued trace can still leave. Bounded, and
+        # logged with whether it finished, because its cost lands on the visitor.
+        sent = tracing.flush()
+        if sent is not None:
+            telemetry.logger.info(
+                "trace_flush",
+                extra={"fields": {"request_id": getattr(context, "aws_request_id", None), **sent}},
+            )
