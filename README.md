@@ -127,8 +127,32 @@ improvement 42 questions cannot firmly establish — and it cannot touch the ~6%
 dense retrieval never reaches, which is the coverage problem that remains. See
 [decision 010](docs/decisions/010-the-reranker-works-and-is-not-worth-shipping.md).
 
+### Hybrid dense + BM25: a clear win that did not survive rewording
+
+BM25 (written out, textbook parameters fixed before measuring) fused with dense by Reciprocal Rank
+Fusion. On the eval set as written it is clearly better at the depths that ship — recall@4
+**+0.153, 95% CI [+0.028, +0.292]**, recall@5 +0.167, nDCG@10 +0.091 — for +43ms per query.
+
+But every eval question was written while reading its gold chunk, and **53%** of a question's
+distinctive words appear in that chunk. BM25 is rewarded for exactly that, and a visitor has not
+read the passage. So the questions were reworded by a model under fixed rules, reviewed by hand
+(6 of 42 excluded for drifting in meaning, not repaired), and scored again against the same
+labels. Overlap fell to 32%, and the hybrid's advantage at k = 4 fell to **+0.028, CI [−0.111,
++0.167]**: indistinguishable from zero. BM25 alone collapsed (MRR 0.477 → 0.316); dense held
+(0.508 → 0.462).
+
+**It is not deployed.** The evidence for it depends on how the questions were worded, and it
+would push two of the demo page's examples down from rank 1. The code stays, tested, for the day
+real visitor questions — which Langfuse now records — can settle it. See
+[decision 015](docs/decisions/015-hybrid-retrieval-and-the-eval-set-that-favoured-it.md).
+
+The same test says something about every number above: **the eval set flatters dense too**
+(recall@5 0.625 as written, 0.542 reworded, on the same 36 questions). It stays frozen as a
+regression baseline, which it does well; it is an optimistic estimate of absolute quality.
+
 Reproduce with `python -m evaluation.run_eval`, compare retrievers with
-`python -m evaluation.compare_retrievers --pool 20`, or check against the committed baseline with
+`python -m evaluation.compare_retrievers --pool 20` or `--system hybrid`, test robustness to
+rewording with `python -m evaluation.robustness`, or check against the committed baseline with
 `python -m evaluation.compare_baseline`.
 
 The metrics are implemented from scratch (`evaluation/eval_harness.py`) and verified against
@@ -425,7 +449,7 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Fourteen so far; these are picked because they document
+trade-off → measured validation. Fifteen so far; these are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -442,6 +466,7 @@ mistakes rather than successes:
 | [012](docs/decisions/012-the-judge-detects-falsehood-not-unsupportedness.md) | An LLM faithfulness judge that scored below a constant classifier, and what it was actually measuring |
 | [013](docs/decisions/013-one-log-line-per-request.md) | A 503 that could not say why: one structured line per request, before any tracing |
 | [014](docs/decisions/014-tracing-that-cannot-cost-an-answer.md) | Langfuse on Lambda: a flush the visitor waits for, capped and counted against the same 30s |
+| [015](docs/decisions/015-hybrid-retrieval-and-the-eval-set-that-favoured-it.md) | A clear hybrid win that came from questions written beside their answers |
 
 ## License
 
