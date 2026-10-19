@@ -36,6 +36,12 @@ RUN python -m rag.build_index && test -f /opt/index/meta.json
 # ------------------------------------------------------------- runtime ------
 FROM deps AS runtime
 ENV QDRANT_BAKED_INDEX=/opt/index PYTHONUNBUFFERED=1
+# The model is baked into /opt/hf above, but sentence-transformers still asks the Hub
+# whether it changed on every load. With no network that cost 63s of retries against
+# 17s offline; with a slow Hub it would push a cold start past the gateway's 30s. The
+# image must not depend on a third party being up. Set here, not in deps: the build
+# has to download the model before it can stop asking. See docs/decisions/017.
+ENV HF_HUB_OFFLINE=1
 
 COPY --from=index /opt/index /opt/index
 COPY rag/ rag/
