@@ -227,8 +227,8 @@ Answers cite the document and page they came from.</p>
 <p class="examples">
   Try:
   <button type="button" onclick="fill(this)">What is the BenCoref dataset?</button>
-  <button type="button" onclick="fill(this)">Why does back-translation hurt coreference?</button>
-  <button type="button" onclick="fill(this)">What is embedding collapse?</button>
+  <button type="button" onclick="fill(this)">How does SpanBERT change BERT's pre-training objective?</button>
+  <button type="button" onclick="fill(this)">What is MuRIL and what languages was it pre-trained on?</button>
 </p>
 
 <div id="answer"></div>
