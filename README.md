@@ -150,6 +150,12 @@ The same test says something about every number above: **the eval set flatters d
 (recall@5 0.625 as written, 0.542 reworded, on the same 36 questions). It stays frozen as a
 regression baseline, which it does well; it is an optimistic estimate of absolute quality.
 
+**Every pull request is gated on these numbers.** CI rebuilds the index from a 2.4 MB snapshot
+of chunk IDs and vectors — no corpus, no AWS credentials, none of the papers' text in a public
+repository — and fails if any metric drops more than 0.03 below the baseline. It reproduces the
+baseline exactly, and fails an injected query bug on 11 of 13 metrics. See
+[decision 016](docs/decisions/016-a-retrieval-gate-without-the-corpus.md).
+
 Reproduce with `python -m evaluation.run_eval`, compare retrievers with
 `python -m evaluation.compare_retrievers --pool 20` or `--system hybrid`, test robustness to
 rewording with `python -m evaluation.robustness`, or check against the committed baseline with
@@ -449,7 +455,7 @@ rather than by hope — see `docs/decisions/007`.
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Fifteen so far; these are picked because they document
+trade-off → measured validation. Sixteen so far; these are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -467,6 +473,7 @@ mistakes rather than successes:
 | [013](docs/decisions/013-one-log-line-per-request.md) | A 503 that could not say why: one structured line per request, before any tracing |
 | [014](docs/decisions/014-tracing-that-cannot-cost-an-answer.md) | Langfuse on Lambda: a flush the visitor waits for, capped and counted against the same 30s |
 | [015](docs/decisions/015-hybrid-retrieval-and-the-eval-set-that-favoured-it.md) | A clear hybrid win that came from questions written beside their answers |
+| [016](docs/decisions/016-a-retrieval-gate-without-the-corpus.md) | Gating every PR on retrieval quality from a text-free index snapshot |
 
 ## License
 

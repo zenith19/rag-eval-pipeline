@@ -1,7 +1,8 @@
 """Run the retrieval eval and compare it against the committed baseline.
 
-Exits non-zero if any metric falls more than `tolerance` below baseline, so the
-same script serves the R3 CI regression gate. Improvements never fail.
+Exits non-zero if any metric falls more than `tolerance` below baseline. CI runs it
+on every PR against an index rebuilt from evaluation/index_snapshot.npz
+(docs/decisions/016). Improvements never fail.
 
     python -m evaluation.compare_baseline            # compare
     python -m evaluation.compare_baseline --update   # accept current numbers as the new baseline
