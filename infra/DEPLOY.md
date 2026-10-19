@@ -102,6 +102,50 @@ exists at create time. A single `apply` on an empty account therefore fails part
 already created the repository — recoverable, but noisier than doing it in the order the dependency
 actually requires.
 
+## Smoke test, after every deploy
+
+Manual, on purpose: automating it would need GitHub-to-AWS credentials, which this project
+decided against (`docs/decisions/016`). Five minutes. Every step checks something that has
+actually broken, or was only ever verified by hand.
+
+```bash
+URL=$(AWS_PROFILE=rag-deploy terraform -chdir=infra output -raw demo_url)
+```
+
+1. **The service answers.** The first request after a deploy hits a cold container and may get
+   `503` from the gateway; that is the 30s ceiling (009), not a fault. Repeat until `ok`.
+   ```bash
+   curl -s "${URL}health"                       # {"status":"ok"}
+   ```
+2. **The page shows answerable examples** — two of the original three were not (014).
+   ```bash
+   curl -s "$URL" | grep -o 'onclick="fill(this)">[^<]*' | cut -d'>' -f2
+   ```
+3. **Each example gets a real answer**, not "I don't know", with citations. Keep one request ID.
+   ```bash
+   curl -s -D - -H 'Content-Type: application/json' \
+     -d '{"question":"What is the BenCoref dataset?","k":4}' "${URL}ask" | grep -iE 'x-request-id|answer'
+   ```
+4. **One request ID finds everything** — expect `START`, the `request` line, `trace_flush` with
+   `"flushed": true`, `END` and `REPORT`:
+   ```bash
+   AWS_PROFILE=rag-deploy .venv/bin/python -m awscli logs filter-log-events --region eu-central-1 \
+     --log-group-name /aws/lambda/rag-eval-pipeline --start-time $(( ($(date +%s) - 900) * 1000 )) \
+     --filter-pattern '"<request-id>"' --query 'events[].message' --output text
+   ```
+5. **Tracing came up** — no output means the Langfuse keys loaded:
+   ```bash
+   AWS_PROFILE=rag-deploy .venv/bin/python -m awscli logs filter-log-events --region eu-central-1 \
+     --log-group-name /aws/lambda/rag-eval-pipeline --start-time $(( ($(date +%s) - 900) * 1000 )) \
+     --filter-pattern '"tracing_disabled"' --query 'events[].message' --output text
+   ```
+6. **The trace arrived**, with its three observations (needs the Langfuse keys locally):
+   ```bash
+   .venv/bin/python -c "from langfuse import Langfuse; from rag import tracing; \
+   print(sorted(o.name for o in tracing.client().api.observations.get_many( \
+   trace_id=Langfuse.create_trace_id(seed='<request-id>')).data))"   # ['generate', 'request', 'retrieve']
+   ```
+
 ## Tearing down
 
 ```bash

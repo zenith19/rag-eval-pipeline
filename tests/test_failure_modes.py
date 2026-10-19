@@ -230,3 +230,24 @@ def test_model_id_matches_the_one_terraform_grants():
     assert BEDROCK_MODEL_ID == match.group(1), (
         f"code calls {BEDROCK_MODEL_ID}, Terraform grants {match.group(1)}"
     )
+
+
+def test_importing_the_lambda_handler_does_not_import_torch():
+    """Lambda's init phase is capped at 10s, and exceeding it is not a slowdown.
+
+    Lambda abandons the init, throws its 10s away, and runs the whole thing again
+    inside the first request. Importing the handler cost 15.5s while
+    sentence_transformers sat at the top of rag/retriever.py, so every cold start
+    in the logs was an init timeout (docs/decisions/017). Torch is ~13.5s of that,
+    so it must load on first use, not on import.
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, api.lambda_handler\n"
+        "print(sorted(m for m in ('torch', 'sentence_transformers', 'transformers')"
+        " if m in sys.modules))\n"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "[]"
