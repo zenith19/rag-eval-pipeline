@@ -28,6 +28,17 @@ def build_index(client: QdrantClient, model: "SentenceTransformer") -> int:
         show_progress_bar=True,
     )
 
+    write_collection(client, vectors, chunks)
+    return len(chunks)
+
+
+def write_collection(client: QdrantClient, vectors, payloads: list[dict]) -> None:
+    """(Re)create the collection and fill it. The one definition of the index's shape.
+
+    Shared with evaluation/snapshot.py, which rebuilds the index in CI from committed
+    vectors: if the two created their collections separately, the CI gate could
+    pass on a distance metric or point order production does not use.
+    """
     if client.collection_exists(COLLECTION):
         client.delete_collection(COLLECTION)
     client.create_collection(
@@ -39,11 +50,10 @@ def build_index(client: QdrantClient, model: "SentenceTransformer") -> int:
     client.upsert(
         collection_name=COLLECTION,
         points=[
-            PointStruct(id=i, vector=vectors[i].tolist(), payload=chunks[i])
-            for i in range(len(chunks))
+            PointStruct(id=i, vector=list(map(float, vectors[i])), payload=payloads[i])
+            for i in range(len(payloads))
         ],
     )
-    return len(chunks)
 
 
 def main() -> None:

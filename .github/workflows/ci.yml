@@ -26,6 +26,23 @@ jobs:
       - name: Tests
         # Integration tests need the Qdrant container and a built index; the
         # conftest skips them automatically when Qdrant is unreachable, and the
-        # skip reason is printed. The retrieval regression gate arrives in R3,
-        # where it runs against a real index.
+        # skip reason is printed. Retrieval itself is gated by the next step.
         run: pytest tests/ -q -rs
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          # The query-embedding model, ~130 MB. Keyed on config.py, where the
+          # model name lives, so changing the model downloads the new one.
+          key: hf-${{ hashFiles('rag/config.py') }}
+
+      - name: Retrieval regression gate
+        # Rebuilds the index from evaluation/index_snapshot.npz (chunk IDs and
+        # vectors, no text) into an embedded Qdrant, then scores the frozen eval
+        # set against evaluation/baseline.json. Fails if any metric drops more
+        # than the baseline's tolerance. See docs/decisions/016.
+        env:
+          QDRANT_PATH: ${{ runner.temp }}/index
+        run: |
+          python -m evaluation.snapshot restore
+          python -m evaluation.compare_baseline
