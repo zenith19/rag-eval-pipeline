@@ -81,7 +81,9 @@ inline, or set them in `.claude/settings.local.json` (personal, gitignored).
    so a rename silently invalidates every gold label pointing into that file. *Adding* files is
    safe. Six of the original nine filenames contain literal newlines — leave them alone.
 3. **Changing `CHUNK_SIZE` / `CHUNK_OVERLAP` re-labels the eval set.** Chunk IDs survive, but the
-   text behind them moves. Treat it as a re-labelling exercise, not a tweak.
+   text behind them moves. Treat it as a re-labelling exercise, not a tweak. Any change to chunking,
+   the corpus or the embedding model also needs `python -m evaluation.snapshot export` and a new
+   baseline in the same PR, or the CI retrieval gate scores a stale index (`docs/decisions/016`).
 4. **Gold labels are chunk IDs, not text.** The eval harness never needs document content; keep
    it decoupled from the store.
 5. **Embedded Qdrant locks its directory exclusively.** Only one client at a time may hold it, so
@@ -94,6 +96,8 @@ inline, or set them in `.claude/settings.local.json` (personal, gitignored).
 docker compose up -d                        # Qdrant
 .venv/bin/python -m rag.build_index         # (re)build the index — needed after corpus changes
 .venv/bin/python -m evaluation.run_eval           # score retrieval
+QDRANT_PATH=/tmp/ci-index .venv/bin/python -m evaluation.snapshot restore   # CI's index, locally
+QDRANT_PATH=/tmp/ci-index .venv/bin/python -m evaluation.compare_baseline   # ...and CI's gate
 .venv/bin/python -m pytest tests/ -q        # full suite (integration tests skip without Qdrant)
 .venv/bin/python -m pytest tests/ -q -m "not integration"   # fast subset
 .venv/bin/python -m uvicorn api.main:app --reload   # API (see "module form" below)
