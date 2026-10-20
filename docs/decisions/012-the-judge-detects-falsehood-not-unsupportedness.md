@@ -46,6 +46,12 @@ comparing two systems against two different ground truths is not a comparison.
 | real unfaithful answers caught | 0/3 | **0/3** |
 | planted fabrications caught | 4/5 | **5/5** |
 
+*Provenance, noted at v1.0:* only the Nova Pro verdicts on the 30 real answers are committed
+(`evaluation/faithfulness/judge_labels.jsonl`), and they reproduce that column's agreement, kappa
+and 0/3. The Nova Lite column and both planted-control counts were printed by
+`evaluation/judge.py` at run time and not saved; re-running it needs Bedrock and will not be
+byte-identical.
+
 Both models score **below a constant classifier**. Kappa below zero means agreement worse than
 chance would give on these margins. Raw agreement alone would have hidden this: 83% sounds
 respectable until you notice that replying "grounded" to everything scores 90%.
