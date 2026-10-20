@@ -1,9 +1,11 @@
 # Infrastructure for the deployed demo.
 #
-# Shape: one Lambda function running the container image, reachable through a
-# Function URL. No API Gateway, no load balancer, no vector database — the index
-# is baked into the image (docs/decisions/006), so there is nothing running, and
-# nothing billed, between requests.
+# Shape: one Lambda function running the container image, reachable through an
+# API Gateway HTTP API that invokes it via an IAM integration role. Not a Function
+# URL: Lambda resource-based policies are not enforced on this account, so one
+# cannot be made public (docs/decisions/009). No load balancer, no vector database
+# — the index is baked into the image (docs/decisions/006), so there is nothing
+# running, and nothing billed, between requests.
 
 terraform {
   required_version = ">= 1.6"
@@ -302,10 +304,11 @@ resource "aws_budgets_budget" "monthly" {
 
 # ---------------------------------------------------------------- warm ------
 
-# A cold /ask takes ~47s: importing torch and loading the embedding model. HTTP API
-# integrations cap at 30s and AWS does not allow that to be raised, so the first
-# visitor after an idle period gets a 503 from the gateway before the function ever
-# answers. Warm requests are ~0.5s, so the fix is to not be cold.
+# A cold /ask takes ~20s, most of it importing torch and loading the embedding model
+# (it was ~47s before docs/decisions/017). HTTP API integrations cap at 30s and AWS
+# does not allow that to be raised, so a cold start leaves little margin, and a
+# slower one would reach the visitor as a 503 from the gateway. Warm requests are
+# ~0.5-1s, so the fix is to not be cold.
 #
 # Five minutes is under Lambda's idle reclaim window without being chatty: ~8,600
 # invocations a month at roughly half a second each, which is cents. Provisioned

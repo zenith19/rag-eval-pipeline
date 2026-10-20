@@ -112,7 +112,9 @@ always-grounded baseline, Cohen's kappa −0.09, and it caught 0 of the 3 unfait
 catching 5 of 5 deliberately planted fabrications. It detects *falsehood*, not *unsupportedness* —
 the real failures are plausible true statements that simply are not in the passages, and a judge
 sharing the generator's knowledge marks those as supported. A stronger model did not help, which
-rules out capability as the cause. See
+points away from capability as the cause. (The committed verdicts — Nova Pro on the 30 real
+answers — reproduce the agreement, kappa and 0-of-3 figures. The planted-control counts and the
+smaller model's verdicts were recorded at run time and are not committed.) See
 [decision 012](docs/decisions/012-the-judge-detects-falsehood-not-unsupportedness.md).
 
 ### Reranking: measured, and deliberately not shipped
@@ -212,8 +214,9 @@ flowchart LR
 ```
 
 Everything is Terraform (`infra/`). The Qdrant index is built at image-build time and baked
-in, so there is no database process and nothing billed between requests — the whole thing
-costs roughly €0.50/month at rest.
+in, so there is no database process and nothing billed between requests. Spend is watched by a
+$5/month budget alarm at 80%; the at-rest cost has not been measured from a bill, so no figure is
+quoted.
 
 **Two constraints shaped this, both discovered by deploying rather than by reading docs.**
 
@@ -288,7 +291,8 @@ answer: the flush before Lambda freezes is capped at 1s and counted in the gatew
 - **Deployment:** Terraform — API Gateway (HTTP), Lambda container, ECR, EventBridge, Budgets,
   SSM Parameter Store for the tracing keys
 - **Observability:** structured JSON logs to CloudWatch, Langfuse tracing with per-request cost
-- **CI:** GitHub Actions — lint, 107 tests, and a retrieval regression gate
+- **CI:** GitHub Actions — lint, tests (107 locally; in CI 102 pass and the 5 that need a Qdrant
+  server skip), and a retrieval regression gate
 - **Agent layer:** MCP server (tools for AI agents); a LangGraph flow kept as a prototype
 - **Evaluation:** recall@k, hit-rate@k, MRR, nDCG, percentile and paired bootstrap, Cohen's kappa
   — all implemented from scratch

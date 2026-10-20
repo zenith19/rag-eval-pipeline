@@ -223,6 +223,7 @@ unaffected.
 - The endpoint is public on purpose — a link nobody can open proves nothing — which is why the
   per-IP rate limit and the budget alarm exist. Check the budget alarm is real before leaving the
   URL in a CV.
-- **HTTP API integrations time out at 30s**, an AWS maximum. A cold `/ask` takes ~47s, so an
-  EventBridge schedule keeps one container warm; see `docs/decisions/010` for why the reranker was
+- **HTTP API integrations time out at 30s**, an AWS maximum. A cold `/ask` takes ~20s (it was
+  ~47s before `docs/decisions/017`), close enough to the ceiling that an EventBridge schedule
+  keeps one container warm; see `docs/decisions/010` for why the reranker was
   not deployed into that budget.
