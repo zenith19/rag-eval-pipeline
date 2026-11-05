@@ -2,8 +2,8 @@
 #
 # Shape: one Lambda function running the container image, reachable through an
 # API Gateway HTTP API that invokes it via an IAM integration role. Not a Function
-# URL: Lambda resource-based policies are not enforced on this account, so one
-# cannot be made public (docs/decisions/009). No load balancer, no vector database
+# URL: one was tried, returned 403 to everyone, and was blamed on the account; the
+# real cause was a half-granted permission (docs/decisions/018). No load balancer, no vector database
 # — the index is baked into the image (docs/decisions/006), so there is nothing
 # running, and nothing billed, between requests.
 
@@ -204,19 +204,17 @@ resource "aws_lambda_function" "app" {
 }
 
 # The public face is API Gateway, and it invokes Lambda with an integration ROLE
-# rather than a resource policy. That is not a style choice: on this account Lambda
-# resource-based policies are not enforced at all. Measured on this function URL —
-# a SigV4-signed request from a principal granted only via lambda:AddPermission
-# returns 403, while the same request from a principal holding an identity-based
-# grant returns 200; anonymous access with a Principal "*" grant returns 403, and so
-# did CloudFront OAC, which depends on a resource-policy grant to its service
-# principal. The account is in no Organization, so no SCP or RCP explains it.
+# rather than a resource policy: credentials_arn makes API Gateway assume this role
+# and call Lambda with its credentials, so authorisation runs through an identity
+# policy and the function carries no public grant at all.
 #
-# credentials_arn makes API Gateway assume this role and call Lambda with its
-# credentials, so authorisation runs through an identity policy, which does work.
-# There is no aws_lambda_permission anywhere below, and that absence is the point.
+# It was chosen because a Function URL returned 403 to everyone, which
+# docs/decisions/009 blamed on the account ignoring resource-based policies. That
+# was wrong (docs/decisions/018): since October 2025 a Function URL needs BOTH
+# lambda:InvokeFunctionUrl and lambda:InvokeFunction in its resource policy, and only
+# the first was granted. If a URL is ever added back, grant both.
 #
-# No function URL either: API Gateway integrates with the function ARN directly.
+# No function URL here: API Gateway integrates with the function ARN directly.
 
 resource "aws_iam_role" "apigw_invoke" {
   name = "${local.name}-apigw-invoke"
@@ -328,8 +326,10 @@ resource "aws_cloudwatch_event_target" "warm" {
   arn   = aws_lambda_function.app.arn
   input = jsonencode({ warm = true })
 
-  # EventBridge invokes through a role rather than a Lambda resource policy, for the
-  # same reason API Gateway does: resource policies are not enforced on this account.
+  # EventBridge invokes through a role rather than a Lambda resource policy, like API
+  # Gateway, so the function carries no resource-policy grants at all. (Written when
+  # resource policies were wrongly believed unenforced here; see docs/decisions/018.
+  # Verified working: a warm ping lands every five minutes.)
   role_arn = aws_iam_role.warm_invoke.arn
 }
 

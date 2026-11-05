@@ -218,15 +218,18 @@ in, so there is no database process and nothing billed between requests. Spend i
 $5/month budget alarm at 80%; the at-rest cost has not been measured from a bill, so no figure is
 quoted.
 
-**Two constraints shaped this, both discovered by deploying rather than by reading docs.**
+**Two things shaped this, both found by deploying rather than by reading docs, and one of them
+was misdiagnosed.**
 
-*Lambda resource-based policies are not enforced on this account.* A SigV4-signed request
-from a principal granted via `lambda:AddPermission` returns 403, while the same request from
-a principal with an identity-based grant returns 200. That rules out a public Function URL
-and also CloudFront with Origin Access Control, which signs as a service principal and is
-authorised by exactly such a policy. API Gateway invokes Lambda through an **integration
-role** instead, so authorisation runs through an identity policy. There is no
-`aws_lambda_permission` anywhere in `infra/`, and that absence is the design.
+*A public Function URL returned 403 to everyone*, and so did CloudFront with Origin Access
+Control. [009](docs/decisions/009-what-deploying-taught-that-reading-did-not.md) concluded that
+this account did not enforce Lambda resource-based policies, and the design routed around that:
+API Gateway invokes Lambda through an **integration role**, so authorisation runs through an
+identity policy. AWS Support later found the real cause. Since October 2025 a Function URL needs
+`lambda:InvokeFunction` granted alongside `lambda:InvokeFunctionUrl`, and only the second was ever
+granted ([018](docs/decisions/018-the-account-was-fine-the-grant-was-half.md)). The API Gateway
+design works and stays; the account-level explanation was wrong. 009 is kept as the record of a
+confident misdiagnosis, and of the 30s gateway ceiling it brought with it.
 
 *A cold `/ask` took ~47s against a 30s gateway ceiling; it now takes ~20s.* Loading torch and
 the embedding model dominates, and the ceiling is an AWS maximum, not a setting. Two fixes found
@@ -478,8 +481,8 @@ docker run -p 8000:8000 -v ~/.aws:/home/app/.aws:ro rag-eval-pipeline
 
 Then open http://localhost:8000 for the query page, or POST to `/ask`.
 
-`infra/` holds the Terraform for deploying it as an AWS Lambda behind API Gateway — not a
-Function URL, which cannot work on this account (see [Deployment](#deployment) and decision 009).
+`infra/` holds the Terraform for deploying it as an AWS Lambda behind API Gateway (see
+[Deployment](#deployment), and decisions 009 and 018 for why not a Function URL).
 `infra/DEPLOY.md` has the deploy steps, the post-deploy smoke test, and how to investigate a
 failed request.
 
@@ -542,12 +545,16 @@ committed to.
 - **Fix the prompt's "You don't know." wording**, together with relabelling the faithfulness set.
 - **An entailment-based faithfulness check** (an NLI model per claim and passage), which cannot
   fall back on world knowledge the way the LLM judge did.
-- **Raise the account's Lambda concurrency limit** (support case open) and reserve concurrency.
+- **Serve through a Function URL** with both permissions granted (018). It is bounded by the
+  function's 90s timeout rather than the gateway's 30s, so a cold start would stop being a
+  near-miss. Re-run 018's reproduction first.
+- **Raise the account's Lambda concurrency limit** above the new-account 10, and reserve
+  concurrency.
 
 ## Design decisions
 
 `docs/decisions/` records each non-obvious choice as observation → hypothesis → decision →
-trade-off → measured validation. Seventeen so far; these are picked because they document
+trade-off → measured validation. Eighteen so far; these are picked because they document
 mistakes rather than successes:
 
 | Record | What it documents |
@@ -567,6 +574,7 @@ mistakes rather than successes:
 | [015](docs/decisions/015-hybrid-retrieval-and-the-eval-set-that-favoured-it.md) | A clear hybrid win that came from questions written beside their answers |
 | [016](docs/decisions/016-a-retrieval-gate-without-the-corpus.md) | Gating every PR on retrieval quality from a text-free index snapshot |
 | [017](docs/decisions/017-a-cold-start-that-failed-before-it-began.md) | Every cold start was an init timeout, and the demo depended on Hugging Face being up |
+| [018](docs/decisions/018-the-account-was-fine-the-grant-was-half.md) | 009's headline finding was wrong: the account was fine, the grant was half a grant |
 
 ## License
 

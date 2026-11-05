@@ -211,12 +211,12 @@ unaffected.
 
 - `aws` as a console script does not work in this checkout — the path contains a space and a
   shebang cannot express it. Use `.venv/bin/python -m awscli` if `aws` is not on PATH system-wide.
-- **The public endpoint is API Gateway, not a Lambda Function URL.** Lambda resource-based
-  policies are not enforced on this account, so an anonymous Function URL returns 403 whatever the
-  policy says, and so does CloudFront with Origin Access Control. API Gateway invokes Lambda
-  through an integration role instead, which authorises via an identity policy. There is no
-  `aws_lambda_permission` in `infra/`, and adding one would be silently ineffective here. The
-  reproduction is in `docs/decisions/009`.
+- **The public endpoint is API Gateway, not a Lambda Function URL.** API Gateway invokes Lambda
+  through an integration role, which authorises via an identity policy, so there is no
+  `aws_lambda_permission` in `infra/`. A Function URL was tried first and returned 403 to
+  everyone. `docs/decisions/009` blamed the account, wrongly: the grant had
+  `lambda:InvokeFunctionUrl` without `lambda:InvokeFunction`, and Function URLs have required both
+  since October 2025. Read `docs/decisions/018` before adding one.
 - **`reserved_concurrent_executions` is -1**, because reserving any concurrency requires 10 to stay
   unreserved and this account's total limit *is* 10. The account limit is the ceiling instead. Set
   `max_concurrency` to a real number once that quota is raised.
