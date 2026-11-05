@@ -36,10 +36,12 @@ Decisions live in `docs/decisions/`.
 - `RAG_S3_BUCKET` (e.g. `zenith-rag-docs-2026`) switches ingestion to S3; unset, it reads `data/`.
   The bucket now holds all 48 papers and is versioned — `scripts/backup_corpus.py` keeps it in
   step. It is a backup, not the serving path: the index is baked into the image.
-- **Lambda resource-based policies are not enforced on this account.** A grant made with
-  `lambda:AddPermission` has no effect, which rules out a public Function URL and CloudFront OAC.
-  API Gateway and EventBridge both invoke through integration roles instead. Do not add an
-  `aws_lambda_permission` expecting it to work; `docs/decisions/009` has the reproduction.
+- **The public endpoint is API Gateway with an integration role, not a Function URL**, and
+  EventBridge invokes through a role too. 009 blamed the Function URL's 403s on the account
+  ignoring resource-based policies; **that was wrong**. A Function URL needs *both*
+  `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` in its resource policy (required since
+  October 2025), and only the first was ever granted. If you add an `aws_lambda_permission` for a
+  URL, grant both. See `docs/decisions/018`.
 
 Rules: never hardcode or print keys, account IDs or `~/.aws/*`. Never change the region or model ID
 to work around an error — diagnose it. If credentials are invalid, stop and say so rather than
