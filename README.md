@@ -3,6 +3,11 @@
 **[Try it →](https://413de9svs9.execute-api.eu-central-1.amazonaws.com/)**  ·  deployed on AWS
 Lambda in `eu-central-1`, answering from 48 papers with page-level citations.
 
+> **Demo status (2026-11-17): answers are paused.** Since 2026-10-21 AWS has restricted Amazon
+> Bedrock on this account (support case open), so the demo returns an error instead of an answer.
+> Nothing in the code or infrastructure changed, and the demo recovers without a redeploy once the
+> restriction is lifted. Retrieval and its evaluation run locally, unaffected.
+
 Retrieval-augmented question answering over a corpus of NLP research papers (coreference
 resolution and low-resource language modeling) — the kind of literature review this was
 built to make searchable. A grounded question-answering backend and retrieval-evaluation
